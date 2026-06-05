@@ -1,0 +1,280 @@
+// Dashboard.tsx
+import React, { useEffect, useState } from 'react';
+import { useStore } from '../store/useStore.js';
+import { GlassCard } from '../components/GlassCard.js';
+import { 
+  Calendar, Sparkles, AlertCircle, Clock, CheckCircle, 
+  Activity, Smile, Play, TrendingUp 
+} from 'lucide-react';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
+import { api } from '../services/api.js';
+
+interface DashboardMetrics {
+  meetingsToday: number;
+  activeUsers: number;
+  generatedTasks: number;
+  completedTasks: number;
+  aiInsightsGenerated: number;
+  averageSentiment: number;
+  taskCompletionRate: number;
+  avgMeetingDuration: number;
+}
+
+const defaultFocusData = [
+  { time: '0m', focus: 65 },
+  { time: '10m', focus: 78 },
+  { time: '20m', focus: 85 },
+  { time: '30m', focus: 92 },
+  { time: '40m', focus: 89 },
+  { time: '50m', focus: 84 },
+];
+
+export const Dashboard: React.FC = () => {
+  const { setCurrentView, tasks, fetchTasks } = useStore();
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [activeMeeting, setActiveMeeting] = useState<any | null>(null);
+  const [focusLevel, setFocusLevel] = useState(88);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        const [mDetails, actList, mtgList] = await Promise.all([
+          api.analytics.getDashboard(),
+          api.workspace.getActivities(),
+          api.meetings.list()
+        ]);
+        
+        setMetrics(mDetails);
+        setActivities(actList.slice(-3).reverse()); // show latest 3 activities
+        
+        const activeM = mtgList.find((m: any) => m.status === 'active');
+        setActiveMeeting(activeM || (mtgList.length ? mtgList[0] : null));
+        fetchTasks();
+      } catch (err) {
+        console.error('Failed to load dashboard metrics:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboardData();
+
+    const interval = setInterval(() => {
+      setFocusLevel(prev => {
+        const delta = Math.floor(Math.random() * 5) - 2.5;
+        return Math.min(100, Math.max(70, Number((prev + delta).toFixed(0))));
+      });
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [fetchTasks]);
+
+  const todoTasksCount = tasks.filter(t => t.status !== 'done').length;
+
+  if (loading || !metrics) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-140px)] text-[var(--theme-text-secondary)]">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-mono tracking-wider">LOADING COMMAND CENTER...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 w-full text-[var(--theme-text)] animate-fadeIn">
+      
+      {/* Top Welcome Title */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold text-[var(--theme-text)] tracking-tight leading-none my-0">AI Command Center</h1>
+          <p className="text-xs text-[var(--theme-text-secondary)] mt-1">Real-time collaboration monitoring & sentiment metrics</p>
+        </div>
+        
+        {/* Quick Action Button */}
+        <button 
+          onClick={() => setCurrentView('meeting-room')}
+          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-primary to-secondary text-white border border-primary/20 shadow-lg hover:shadow-primary/20 hover:-translate-y-0.5 transition-all text-xs font-bold cursor-pointer"
+        >
+          <Play className="w-4 h-4 fill-white text-white" />
+          <span>Launch Live Sync Room</span>
+        </button>
+      </div>
+      
+      {/* 10 Widgets in Bento Grid Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 auto-rows-[140px]">
+        
+        {/* Widget 1: Meetings Today (col-span-2) */}
+        <GlassCard hoverable className="col-span-1 md:col-span-2 row-span-1 border-[var(--theme-border)] flex flex-col justify-between" onClick={() => setCurrentView('meeting-room')}>
+          <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
+            <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-primary" /> Active Workspace Session</span>
+            {activeMeeting?.status === 'active' && (
+              <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full font-bold animate-pulse">LIVE NOW</span>
+            )}
+          </div>
+          <div className="flex items-end justify-between mt-2">
+            <div>
+              <p className="text-2xl font-black text-[var(--theme-text)] truncate max-w-[320px]">
+                {activeMeeting ? activeMeeting.title : 'Ready to Start Sync'}
+              </p>
+              <p className="text-xs text-[var(--theme-text-secondary)] mt-0.5">
+                {activeMeeting ? `Created on ${new Date(activeMeeting.created_at).toLocaleDateString()}` : 'Click to launch meeting workspace'}
+              </p>
+            </div>
+            <button className="rounded-lg bg-[var(--theme-surface-alt)] border border-[var(--theme-border)] px-3 py-1.5 text-[10px] font-bold hover:bg-primary hover:text-white transition-colors cursor-pointer">
+              {activeMeeting?.status === 'active' ? 'Join' : 'Enter'}
+            </button>
+          </div>
+        </GlassCard>
+
+        {/* Widget 2: AI Insights Ticker */}
+        <GlassCard className="col-span-1 border-[var(--theme-border)] flex flex-col justify-between">
+          <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
+            <span className="flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-accent" /> Insights Compiled</span>
+            <span className="text-[9px] text-accent font-bold font-mono">Real-time</span>
+          </div>
+          <div className="mt-2">
+            <p className="text-3xl font-black text-accent font-mono tracking-tight">{metrics.aiInsightsGenerated}</p>
+            <p className="text-[10px] text-[var(--theme-text-secondary)] mt-1">Transcripts converted to notes</p>
+          </div>
+        </GlassCard>
+
+        {/* Widget 3: Pending Action Items */}
+        <GlassCard hoverable className="col-span-1 border-[var(--theme-border)] flex flex-col justify-between" onClick={() => setCurrentView('kanban')}>
+          <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
+            <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-secondary" /> Pending Goals</span>
+            <span className="rounded bg-[var(--theme-surface-alt)] px-2 py-0.5 text-[9px] font-mono font-bold text-[var(--theme-text-muted)]">{todoTasksCount} left</span>
+          </div>
+          <div className="mt-2">
+            <p className="text-3xl font-black text-[var(--theme-text)] font-mono">{todoTasksCount}</p>
+            <p className="text-[10px] text-[var(--theme-text-muted)] mt-1">Assigned from live meetings</p>
+          </div>
+        </GlassCard>
+
+        {/* Widget 4: Productivity Score (col-span-1, row-span-2) */}
+        <GlassCard hoverable className="col-span-1 row-span-2 border-[var(--theme-border)] flex flex-col justify-between" onClick={() => setCurrentView('analytics')}>
+          <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
+            <span>Overall Productivity</span>
+            <TrendingUp className="w-4 h-4 text-primary" />
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center my-4">
+            {/* Circular Ring Progress */}
+            <div className="relative w-28 h-28 flex items-center justify-center">
+              <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="40" stroke="rgba(255,255,255,0.05)" strokeWidth="8" fill="transparent" />
+                <circle cx="50" cy="50" r="40" stroke="url(#primaryGradient)" strokeWidth="8" fill="transparent"
+                  strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * metrics.taskCompletionRate) / 100} strokeLinecap="round" />
+                <defs>
+                  <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#6D5DFC" />
+                    <stop offset="100%" stopColor="#00D4FF" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div className="text-center">
+                <span className="text-3xl font-black font-mono text-[var(--theme-text)]">{metrics.taskCompletionRate}%</span>
+                <span className="block text-[8px] text-[var(--theme-text-secondary)] uppercase tracking-widest font-bold mt-0.5">Clarity</span>
+              </div>
+            </div>
+          </div>
+          <p className="text-[10px] text-center text-[var(--theme-text-secondary)]">Based on task completion velocity</p>
+        </GlassCard>
+
+        {/* Widget 5: Team Health Score */}
+        <GlassCard hoverable className="col-span-1 border-[var(--theme-border)] flex flex-col justify-between" onClick={() => setCurrentView('team-mood')}>
+          <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
+            <span className="flex items-center gap-1.5"><Smile className="w-4 h-4 text-accent" /> Emotional Energy</span>
+            <span className="text-[9px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">EXCELLENT</span>
+          </div>
+          <div className="mt-2">
+            <p className="text-3xl font-black text-[var(--theme-text)] font-mono">{metrics.averageSentiment}%</p>
+            <p className="text-[10px] text-[var(--theme-text-muted)] mt-1">Average meeting sentiment</p>
+          </div>
+        </GlassCard>
+
+        {/* Widget 6: Upcoming Meetings */}
+        <GlassCard className="col-span-1 border-[var(--theme-border)] flex flex-col justify-between">
+          <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
+            <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-[var(--theme-text-secondary)]" /> Session Duration</span>
+          </div>
+          <div className="mt-2 text-left space-y-1">
+            <p className="text-3xl font-black text-[var(--theme-text)] font-mono">{metrics.avgMeetingDuration}m</p>
+            <p className="text-[10px] text-[var(--theme-text-secondary)] font-mono">Average session slot</p>
+          </div>
+        </GlassCard>
+
+        {/* Widget 7: Smart System Alerts */}
+        <GlassCard className="col-span-1 border-[var(--theme-border)] flex flex-col justify-between bg-yellow-500/5 border-yellow-500/20">
+          <div className="flex justify-between items-center text-xs text-yellow-500">
+            <span className="flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> Active Workspace Users</span>
+            <span className="text-[9px] bg-yellow-500/20 px-1.5 py-0.5 rounded text-yellow-400 font-bold">ONLINE</span>
+          </div>
+          <div className="mt-2">
+            <p className="text-3xl font-black text-[var(--theme-text)] font-mono">{metrics.activeUsers}</p>
+            <p className="text-[10px] text-[var(--theme-text-secondary)] mt-1">Members currently active</p>
+          </div>
+        </GlassCard>
+
+        {/* Widget 8: Focus Meter (col-span-2, row-span-1) */}
+        <GlassCard className="col-span-1 md:col-span-2 row-span-1 border-[var(--theme-border)] flex flex-col justify-between">
+          <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
+            <span className="flex items-center gap-1.5"><Activity className="w-4 h-4 text-secondary" /> Attention Concentration</span>
+            <span className="text-xs font-bold font-mono text-secondary">{focusLevel}%</span>
+          </div>
+          <div className="flex-1 min-h-[50px] mt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={defaultFocusData} margin={{ top: 2, right: 0, left: -28, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorFocus" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="5%" stopColor="#00D4FF" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#00D4FF" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="time" stroke="var(--theme-chart-axis)" fontSize={8} tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--theme-chart-axis)" fontSize={8} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={{ background: 'var(--theme-surface)', border: '1px solid var(--theme-border)', fontSize: '10px' }} />
+                <Area type="monotone" dataKey="focus" stroke="#00D4FF" strokeWidth={2} fillOpacity={1} fill="url(#colorFocus)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </GlassCard>
+
+        {/* Widget 9: Recent Activity Timeline */}
+        <GlassCard className="col-span-1 border-[var(--theme-border)] flex flex-col justify-between">
+          <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
+            <span>Recent Activity Logs</span>
+          </div>
+          <div className="mt-2 text-left space-y-1.5 overflow-hidden">
+            {activities.length ? (
+              activities.map((act) => (
+                <div key={act.id} className="text-[10px] text-[var(--theme-text-muted)] truncate">
+                  <span className="text-secondary font-bold font-mono">[Sync]</span> {act.user_name} {act.action}
+                </div>
+              ))
+            ) : (
+              <div className="text-[10px] text-[var(--theme-text-muted)] font-mono italic">No actions logged yet.</div>
+            )}
+          </div>
+        </GlassCard>
+
+        {/* Widget 10: AI Recommendations */}
+        <GlassCard className="col-span-1 md:col-span-2 border-[var(--theme-border)] flex items-start gap-4">
+          <div className="rounded-xl bg-primary/20 p-2.5 border border-primary/30 text-primary flex-shrink-0">
+            <Sparkles className="w-5 h-5 animate-pulse" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="text-xs font-bold text-[var(--theme-text)] font-mono tracking-wider">AI INSIGHT ACTION RECOMMENDATION</h4>
+            <p className="text-xs text-[var(--theme-text-secondary)] leading-relaxed">
+              Design backlog is growing and team fatigue is up 12% in Marketing comparison. We suggest scheduling a 25-minute check-in or utilizing focus blocks.
+            </p>
+          </div>
+        </GlassCard>
+
+      </div>
+    </div>
+  );
+};
+export default Dashboard;
