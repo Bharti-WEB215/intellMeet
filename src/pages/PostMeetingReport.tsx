@@ -74,7 +74,7 @@ export const PostMeetingReport: React.FC = () => {
 
   if (loading || !report) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-140px)] text-slate-400">
+      <div className="flex items-center justify-center min-h-[calc(100vh-140px)] text-[var(--theme-text-secondary)]">
         <div className="flex flex-col items-center space-y-4">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           <span className="text-xs font-mono tracking-wider">COMPILING SESSION DOSSIER...</span>
@@ -87,20 +87,20 @@ export const PostMeetingReport: React.FC = () => {
   const meetingTasks = tasks.filter(t => t.id.includes('tsk') || t.title.length > 0);
 
   return (
-    <div className="space-y-6 w-full text-slate-100 pb-12 animate-fadeIn">
+    <div className="space-y-6 w-full text-[var(--theme-text)] pb-12 animate-fadeIn">
       
       {/* Top Header Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--theme-divider)] pb-4">
         <div className="flex items-center space-x-3">
           <button 
             onClick={() => setCurrentView('dashboard')}
-            className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors cursor-pointer border border-white/10"
+            className="p-2 bg-[var(--theme-surface-alt)] hover:bg-[var(--theme-surface-hover)] rounded-xl transition-colors cursor-pointer border border-[var(--theme-border)]"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-2xl font-extrabold text-white leading-none my-0">Session Outcome Dossier</h1>
-            <p className="text-xs text-slate-400 mt-1">{meetingTitle} • Outcome Summary Report</p>
+            <h1 className="text-2xl font-extrabold text-[var(--theme-text)] leading-none my-0">Session Outcome Dossier</h1>
+            <p className="text-xs text-[var(--theme-text-secondary)] mt-1">{meetingTitle} • Outcome Summary Report</p>
           </div>
         </div>
 
@@ -108,13 +108,13 @@ export const PostMeetingReport: React.FC = () => {
         <div className="flex items-center space-x-2">
           <button 
             onClick={() => handleExport('PDF')}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-white/10 rounded-xl hover:bg-slate-800 transition-colors text-xs font-semibold cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-[var(--theme-surface)] border border-[var(--theme-border)] rounded-xl hover:bg-[var(--theme-surface-hover)] transition-colors text-xs font-semibold cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" /> PDF
           </button>
           <button 
             onClick={() => handleExport('Email')}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-white/10 rounded-xl hover:bg-slate-800 transition-colors text-xs font-semibold cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-[var(--theme-surface)] border border-[var(--theme-border)] rounded-xl hover:bg-[var(--theme-surface-hover)] transition-colors text-xs font-semibold cursor-pointer"
           >
             <Mail className="w-3.5 h-3.5" /> Email
           </button>
@@ -137,41 +137,41 @@ export const PostMeetingReport: React.FC = () => {
         <div className="lg:col-span-8 space-y-6">
           
           {/* Executive Summary */}
-          <GlassCard className="border-white/10 space-y-4 bg-slate-950/20">
-            <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+          <GlassCard className="border-[var(--theme-border)] space-y-4 bg-[var(--theme-surface-alt)]">
+            <h3 className="text-base font-bold text-[var(--theme-text)] flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" /> Executive Brief Summary
             </h3>
-            <p className="text-xs text-slate-350 leading-relaxed">
+            <p className="text-xs text-[var(--theme-text-secondary)] leading-relaxed">
               {report.summary.summary}
             </p>
           </GlassCard>
 
           {/* Key Decisions */}
-          <GlassCard className="border-white/10 space-y-4">
-            <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+          <GlassCard className="border-[var(--theme-border)] space-y-4">
+            <h3 className="text-base font-bold text-[var(--theme-text)] flex items-center gap-2">
               <Target className="w-5 h-5 text-accent" /> Key Decisions Logged
             </h3>
 
             <div className="space-y-3">
               {report.summary.decisions.map((dec, idx) => (
-                <div key={idx} className="flex items-start gap-3 bg-white/3 border border-white/5 p-3 rounded-xl">
+                <div key={idx} className="flex items-start gap-3 bg-[var(--theme-surface-alt)] border border-[var(--theme-divider)] p-3 rounded-xl">
                   <CheckCircle2 className="w-5 h-5 text-accent mt-0.5 flex-shrink-0" />
                   <div>
-                    <h4 className="text-xs font-bold text-slate-200">Decision Outcome #{idx + 1}</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{dec}</p>
+                    <h4 className="text-xs font-bold text-[var(--theme-text)]">Decision Outcome #{idx + 1}</h4>
+                    <p className="text-[11px] text-[var(--theme-text-secondary)] mt-0.5">{dec}</p>
                   </div>
                 </div>
               ))}
               {report.summary.decisions.length === 0 && (
-                <div className="text-xs text-slate-500 font-mono italic">No decisions recorded during session.</div>
+                <div className="text-xs text-[var(--theme-text-muted)] font-mono italic">No decisions recorded during session.</div>
               )}
             </div>
           </GlassCard>
 
           {/* Action Items List */}
-          <GlassCard className="border-white/10 space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-white/5">
-              <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+          <GlassCard className="border-[var(--theme-border)] space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-[var(--theme-divider)]">
+              <h3 className="text-base font-bold text-[var(--theme-text)] flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-secondary" /> Extracted Action Items
               </h3>
               <button 
@@ -184,12 +184,12 @@ export const PostMeetingReport: React.FC = () => {
 
             <div className="space-y-3">
               {meetingTasks.map(t => (
-                <div key={t.id} className="flex items-center justify-between bg-slate-950/40 border border-white/5 p-3.5 rounded-xl">
+                <div key={t.id} className="flex items-center justify-between bg-[var(--theme-input-bg)] border border-[var(--theme-divider)] p-3.5 rounded-xl">
                   <div className="flex items-center space-x-3.5">
                     <img className="w-7 h-7 rounded-full object-cover" src={t.assignee.avatar} alt={t.assignee.name} />
                     <div>
-                      <h4 className="text-xs font-bold text-slate-200">{t.title}</h4>
-                      <p className="text-[10px] text-slate-450 mt-0.5">Assignee: {t.assignee.name} • Deadline: {t.deadline}</p>
+                      <h4 className="text-xs font-bold text-[var(--theme-text)]">{t.title}</h4>
+                      <p className="text-[10px] text-[var(--theme-text-muted)] mt-0.5">Assignee: {t.assignee.name} • Deadline: {t.deadline}</p>
                     </div>
                   </div>
                   <div>
@@ -206,7 +206,7 @@ export const PostMeetingReport: React.FC = () => {
                 </div>
               ))}
               {meetingTasks.length === 0 && (
-                <div className="text-xs text-slate-500 font-mono italic">No action items extracted.</div>
+                <div className="text-xs text-[var(--theme-text-muted)] font-mono italic">No action items extracted.</div>
               )}
             </div>
           </GlassCard>
@@ -217,14 +217,14 @@ export const PostMeetingReport: React.FC = () => {
         <div className="lg:col-span-4 space-y-6">
           
           {/* DNA Stats Snapshot */}
-          <GlassCard className="border-white/10 space-y-4">
-            <h3 className="text-sm font-bold text-slate-350 flex items-center gap-2">
+          <GlassCard className="border-[var(--theme-border)] space-y-4">
+            <h3 className="text-sm font-bold text-[var(--theme-text-secondary)] flex items-center gap-2">
               <BarChart2 className="w-4 h-4 text-primary" /> Session Blueprint DNA
             </h3>
 
             <div className="space-y-3">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-200">Collaboration Index</span>
+                <span className="text-[var(--theme-text)]">Collaboration Index</span>
                 <span className="font-mono text-primary font-bold">{report.analytics?.collaboration_percent || 85}%</span>
               </div>
               <div className="flex justify-between items-center text-xs">
@@ -245,45 +245,45 @@ export const PostMeetingReport: React.FC = () => {
 
             <button 
               onClick={() => setCurrentView('meeting-dna')}
-              className="w-full py-2.5 rounded-xl border border-white/10 hover:bg-white/5 transition-colors text-xs font-semibold cursor-pointer"
+              className="w-full py-2.5 rounded-xl border border-[var(--theme-border)] hover:bg-[var(--theme-surface-hover)] transition-colors text-xs font-semibold cursor-pointer"
             >
               Analyze Radar Charts
             </button>
           </GlassCard>
 
           {/* Emotion Spectrums */}
-          <GlassCard className="border-white/10 space-y-4">
-            <h3 className="text-sm font-bold text-slate-355 flex items-center gap-2">
+          <GlassCard className="border-[var(--theme-border)] space-y-4">
+            <h3 className="text-sm font-bold text-[var(--theme-text-secondary)] flex items-center gap-2">
               <Smile className="w-4 h-4 text-accent" /> Emotional Landscape
             </h3>
 
             <div className="flex items-center justify-between gap-2">
               <div className="flex flex-col items-center flex-1 py-2 rounded bg-emerald-500/10 border border-emerald-500/15">
                 <span className="text-xs text-emerald-400 font-bold font-mono">{report.analytics?.positive_percent || 78}%</span>
-                <span className="text-[9px] text-slate-450 mt-0.5">Positive</span>
+                <span className="text-[9px] text-[var(--theme-text-muted)] mt-0.5">Positive</span>
               </div>
               <div className="flex flex-col items-center flex-1 py-2 rounded bg-slate-500/10 border border-slate-500/15">
                 <span className="text-xs text-slate-400 font-bold font-mono">{report.analytics?.neutral_percent || 17}%</span>
-                <span className="text-[9px] text-slate-450 mt-0.5">Neutral</span>
+                <span className="text-[9px] text-[var(--theme-text-muted)] mt-0.5">Neutral</span>
               </div>
               <div className="flex flex-col items-center flex-1 py-2 rounded bg-red-500/10 border border-red-500/15">
                 <span className="text-xs text-red-400 font-bold font-mono">{report.analytics?.negative_percent || 5}%</span>
-                <span className="text-[9px] text-slate-450 mt-0.5">Negative</span>
+                <span className="text-[9px] text-[var(--theme-text-muted)] mt-0.5">Negative</span>
               </div>
             </div>
           </GlassCard>
 
           {/* Follow-up Tracker */}
-          <GlassCard className="border-white/10 space-y-3">
-            <h3 className="text-sm font-bold text-slate-355 flex items-center gap-2">
-              <Users className="w-4 h-4 text-slate-400" /> Attendance Roster
+          <GlassCard className="border-[var(--theme-border)] space-y-3">
+            <h3 className="text-sm font-bold text-[var(--theme-text-secondary)] flex items-center gap-2">
+              <Users className="w-4 h-4 text-[var(--theme-text-secondary)]" /> Attendance Roster
             </h3>
             <div className="flex -space-x-2 items-center">
-              <img className="w-7 h-7 rounded-full border-2 border-slate-900 object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80" alt="avatar" />
-              <img className="w-7 h-7 rounded-full border-2 border-slate-900 object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80" alt="avatar" />
-              <img className="w-7 h-7 rounded-full border-2 border-slate-900 object-cover" src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80" alt="avatar" />
-              <img className="w-7 h-7 rounded-full border-2 border-slate-900 object-cover" src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80" alt="avatar" />
-              <span className="pl-4 text-[10px] text-slate-400 font-bold font-mono">100% ATTENDANCE</span>
+              <img className="w-7 h-7 rounded-full border-2 border-[var(--theme-surface)] object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80" alt="avatar" />
+              <img className="w-7 h-7 rounded-full border-2 border-[var(--theme-surface)] object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80" alt="avatar" />
+              <img className="w-7 h-7 rounded-full border-2 border-[var(--theme-surface)] object-cover" src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80" alt="avatar" />
+              <img className="w-7 h-7 rounded-full border-2 border-[var(--theme-surface)] object-cover" src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80" alt="avatar" />
+              <span className="pl-4 text-[10px] text-[var(--theme-text-secondary)] font-bold font-mono">100% ATTENDANCE</span>
             </div>
           </GlassCard>
 

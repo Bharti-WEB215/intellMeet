@@ -16,9 +16,12 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`glass-panel rounded-2xl p-6 transition-all duration-300 ${
-        hoverable ? 'glass-panel-hover cursor-pointer' : ''
+      className={`glass-panel rounded-2xl p-6 transition-all duration-400 ${
+        hoverable ? 'glass-panel-hover card-shine cursor-pointer' : ''
       } ${className}`}
+      style={{
+        boxShadow: 'var(--theme-card-shadow)',
+      }}
     >
       {children}
     </div>

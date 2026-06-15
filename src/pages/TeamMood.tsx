@@ -85,7 +85,7 @@ export const TeamMood: React.FC = () => {
         {/* Module 1: Mood Meter (col-span-4) */}
         <div className="lg:col-span-4 space-y-6">
           <GlassCard className="border-[var(--theme-border)] space-y-4">
-            <h3 className="text-sm font-bold text-slate-355 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-[var(--theme-text-secondary)] flex items-center gap-2">
               <Smile className="w-4 h-4 text-accent" /> Emotional Spectrum
             </h3>
             
@@ -138,7 +138,7 @@ export const TeamMood: React.FC = () => {
 
           {/* Energy Scores Card */}
           <GlassCard className="border-[var(--theme-border)] space-y-4">
-            <h3 className="text-sm font-bold text-slate-355 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-[var(--theme-text-secondary)] flex items-center gap-2">
               <Zap className="w-4 h-4 text-secondary" /> Energy Index Scorecard
             </h3>
 
@@ -199,7 +199,7 @@ export const TeamMood: React.FC = () => {
         <div className="lg:col-span-6 space-y-6">
           <GlassCard className="border-[var(--theme-border)] space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-355 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-[var(--theme-text-secondary)] flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-red-500" /> Burnout Risk Warning Desk
               </h3>
               <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full font-bold">1 ALARM</span>
@@ -258,7 +258,7 @@ export const TeamMood: React.FC = () => {
           </div>
           <div className="space-y-1.5">
             <h4 className="text-xs font-bold text-[var(--theme-text)] font-mono tracking-wider">AI DIAGNOSTIC RECOMMENDATIONS</h4>
-            <p className="text-xs text-slate-355 leading-relaxed">
+            <p className="text-xs text-[var(--theme-text-secondary)] leading-relaxed">
               Linguistic evaluation indicates a 15% increase in stressful phrasing ("backlog", "deadlines", "delay") in the design channel. Recommend scheduling a <strong>"Quiet Block Thursday"</strong> and limiting consecutive meetings to 30 minutes to reduce burnout fatigue.
             </p>
           </div>

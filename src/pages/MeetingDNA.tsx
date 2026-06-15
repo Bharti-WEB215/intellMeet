@@ -118,7 +118,7 @@ export const MeetingDNA: React.FC = () => {
         {/* Module 2: Progress Rings & Highlights (col-span-4) */}
         <div className="lg:col-span-4 space-y-6">
           <GlassCard className="border-[var(--theme-border)] space-y-4">
-            <h3 className="text-sm font-bold text-slate-355 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-[var(--theme-text-secondary)] flex items-center gap-2">
               <Award className="w-4 h-4 text-accent" /> Highlight Indicators
             </h3>
 
@@ -183,10 +183,10 @@ export const MeetingDNA: React.FC = () => {
           </GlassCard>
 
           <GlassCard className="border-[var(--theme-border)] space-y-3">
-            <h3 className="text-sm font-bold text-slate-355 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-[var(--theme-text-secondary)] flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-primary" /> AI Signature Feedback
             </h3>
-            <p className="text-xs text-slate-355 leading-relaxed">
+            <p className="text-xs text-[var(--theme-text-secondary)] leading-relaxed">
               This session ranks in the top tier for focus ({dna.focus_score}%) and decision making efficiency ({dna.decision_quality}%). Strong collaboration marks and minimal distraction offsets prove that framing agendas beforehand dramatically increases productivity outcomes.
             </p>
           </GlassCard>

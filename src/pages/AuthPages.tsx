@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { GlassCard } from '../components/GlassCard';
-import { Sparkles, ArrowLeft, Mail, Lock, User, KeyRound, AlertCircle } from 'lucide-react';
+import ThemeToggle from '../components/ThemeToggle';
+import { Sparkles, ArrowLeft, Mail, Lock, User, AlertCircle, Shield, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const AuthPages: React.FC = () => {
-  const { authMode, setAuthMode, login, setCurrentView } = useStore();
+  const { authMode, setAuthMode, login, setCurrentView, theme, toggleTheme } = useStore();
   
   // Inputs
   const [email, setEmail] = useState('');
@@ -78,7 +79,6 @@ export const AuthPages: React.FC = () => {
     const codes = [...otpCodes];
     codes[index] = val.slice(-1);
     setOtpCodes(codes);
-    // Autofocus next element
     if (val && index < 3) {
       const nextInput = document.getElementById(`otp-${index + 1}`);
       nextInput?.focus();
@@ -94,76 +94,114 @@ export const AuthPages: React.FC = () => {
   return (
     <div className="min-h-screen bg-[var(--theme-bg)] grid grid-cols-1 lg:grid-cols-12 overflow-hidden text-[var(--theme-text)]">
       
-      {/* Left panel: Vector branding (Linear style) */}
+      {/* Left panel: Premium branding */}
       <div className="hidden lg:flex lg:col-span-5 relative bg-[var(--theme-bg)] flex-col justify-between p-12 overflow-hidden border-r border-[var(--theme-divider)]">
-        {/* Background grids */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(109,93,252,0.12)_0,transparent_65%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(var(--theme-grid-line)_1px,transparent_1px),linear-gradient(90deg,var(--theme-grid-line)_1px,transparent_1px)] bg-[size:32px_32px]" />
+        {/* Background effects */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,var(--theme-aurora-1)_0,transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,var(--theme-aurora-2)_0,transparent_60%)]" />
+        <div className="absolute inset-0 dot-grid opacity-30" />
 
         {/* Header link back to landing */}
-        <div 
-          onClick={() => setCurrentView('landing')} 
-          className="flex items-center space-x-2 cursor-pointer z-10"
-        >
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-secondary flex items-center justify-center border border-[var(--theme-border)] shadow-md">
-            <Sparkles className="w-4.5 h-4.5 text-white" />
+        <div className="flex items-center justify-between z-10">
+          <div
+            onClick={() => setCurrentView('landing')} 
+            className="flex items-center space-x-2.5 cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[var(--theme-primary)] to-[var(--theme-secondary)] flex items-center justify-center shadow-lg" style={{ boxShadow: 'var(--theme-glow-primary)' }}>
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-bold text-lg tracking-tight text-[var(--theme-text)]" style={{ fontFamily: 'Space Grotesk' }}>
+              IntellMeet
+            </span>
           </div>
-          <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-slate-100 to-slate-350 bg-clip-text text-transparent">
-            IntellMeet
-          </span>
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
         </div>
 
-        {/* Mid illustration widgets */}
-        <div className="z-10 space-y-6">
+        {/* Mid illustration */}
+        <div className="z-10 space-y-8">
           <motion.div 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="space-y-3"
+            transition={{ delay: 0.2, duration: 0.6 }}
+            className="space-y-4"
           >
-            <h2 className="text-3xl font-black tracking-tight text-[var(--theme-text)] leading-tight">
+            <h2 className="text-4xl font-black tracking-tight text-[var(--theme-text)] leading-tight" style={{ fontFamily: 'Space Grotesk' }}>
               Welcome to the <br />
-              Future of Team Sync.
+              <span className="gradient-text-animated">Future of Team Sync.</span>
             </h2>
-            <p className="text-sm text-[var(--theme-text-secondary)] max-w-sm">
+            <p className="text-sm text-[var(--theme-text-secondary)] max-w-sm leading-relaxed">
               Sign in to experience the AI Command Center, sentiment breakdowns, and Kanban-synced meeting report features.
             </p>
           </motion.div>
 
           <div className="space-y-4">
-            <GlassCard className="border-[var(--theme-border)] bg-[var(--theme-surface-alt)] p-4 max-w-sm">
-              <div className="flex items-start gap-3">
-                <div className="bg-primary/20 border border-primary/30 p-2 rounded-lg text-primary mt-0.5">
-                  <Sparkles className="w-4 h-4 animate-spin" />
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <GlassCard className="p-4 max-w-sm">
+                <div className="flex items-start gap-3">
+                  <div className="bg-[var(--theme-primary)]/15 border border-[var(--theme-primary)]/25 p-2.5 rounded-xl" style={{ color: 'var(--theme-primary)' }}>
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-[var(--theme-text)] font-mono tracking-wider">AI INTELLIGENCE ENGINE</h4>
+                    <p className="text-[11px] text-[var(--theme-text-secondary)] leading-relaxed">Transcribed 14 tasks with 98.2% accuracy during design sync today.</p>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-[var(--theme-text)] font-mono">INTELL-ORB SYSTEM</h4>
-                  <p className="text-[11px] text-[var(--theme-text-secondary)]">AI transcribed 14 tasks during design meeting today.</p>
+              </GlassCard>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.6 }}
+            >
+              <GlassCard className="p-4 max-w-sm translate-x-6">
+                <div className="flex items-start gap-3">
+                  <div className="bg-[var(--theme-secondary)]/15 border border-[var(--theme-secondary)]/25 p-2.5 rounded-xl" style={{ color: 'var(--theme-secondary)' }}>
+                    <Shield className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-[var(--theme-text)] font-mono tracking-wider">ENTERPRISE SECURITY</h4>
+                    <p className="text-[11px] text-[var(--theme-text-secondary)] leading-relaxed">SOC-2 compliant. End-to-end encryption on all transcripts.</p>
+                  </div>
                 </div>
-              </div>
-            </GlassCard>
-            <GlassCard className="border-[var(--theme-border)] bg-[var(--theme-surface-alt)] p-4 max-w-sm translate-x-4">
-              <div className="flex items-start gap-3">
-                <div className="bg-secondary/20 border border-secondary/30 p-2 rounded-lg text-secondary mt-0.5">
-                  <KeyRound className="w-4 h-4" />
+              </GlassCard>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.8 }}
+            >
+              <GlassCard className="p-4 max-w-sm translate-x-3">
+                <div className="flex items-start gap-3">
+                  <div className="bg-emerald-500/15 border border-emerald-500/25 p-2.5 rounded-xl text-emerald-400">
+                    <Zap className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-[var(--theme-text)] font-mono tracking-wider">REAL-TIME SYNC</h4>
+                    <p className="text-[11px] text-[var(--theme-text-secondary)] leading-relaxed">WebSocket-powered live collaboration across all participants.</p>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-[var(--theme-text)] font-mono">SECURITY PROTOCOL</h4>
-                  <p className="text-[11px] text-[var(--theme-text-secondary)]">All transcripts are SOC-2 compliant and encrypted.</p>
-                </div>
-              </div>
-            </GlassCard>
+              </GlassCard>
+            </motion.div>
           </div>
         </div>
 
         {/* Footer */}
         <div className="text-xs text-[var(--theme-text-muted)] z-10">
-          <p>© 2026 IntellMeet AI Platforms Corp. Google DeepMind sandbox.</p>
+          <p>© 2026 IntellMeet AI Platforms Corp.</p>
         </div>
       </div>
 
       {/* Right panel: Forms */}
       <div className="col-span-1 lg:col-span-7 flex flex-col justify-center items-center px-6 sm:px-16 py-12 relative">
+        {/* Mobile theme toggle */}
+        <div className="lg:hidden absolute top-6 right-6">
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+        </div>
+        
         <button 
           onClick={() => setCurrentView('landing')}
           className="absolute top-6 left-6 text-xs text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] flex items-center gap-1.5 font-medium transition-colors"
@@ -185,8 +223,8 @@ export const AuthPages: React.FC = () => {
                 className="space-y-6"
               >
                 <div>
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--theme-text)]">Sign In</h1>
-                  <p className="text-xs text-[var(--theme-text-secondary)] mt-1">Enter your details to access your meetings</p>
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--theme-text)]" style={{ fontFamily: 'Space Grotesk' }}>Sign In</h1>
+                  <p className="text-xs text-[var(--theme-text-secondary)] mt-1.5">Enter your details to access your meetings</p>
                 </div>
 
                 {errorMsg && (
@@ -200,14 +238,14 @@ export const AuthPages: React.FC = () => {
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-[var(--theme-text)]">Email Address</label>
                     <div className="relative flex items-center">
-                      <Mail className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-secondary)]" />
+                      <Mail className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-muted)]" />
                       <input 
                         type="email" 
                         required
-                        placeholder="j.carter@stripe.com" 
+                        placeholder="j.carter@company.com" 
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-primary/50 transition-colors"
+                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-[var(--theme-primary)]/50 focus:ring-1 focus:ring-[var(--theme-primary)]/20 transition-all"
                       />
                     </div>
                   </div>
@@ -218,34 +256,42 @@ export const AuthPages: React.FC = () => {
                       <button 
                         type="button"
                         onClick={() => setAuthMode('forgot')}
-                        className="text-xs text-primary hover:underline"
+                        className="text-xs text-[var(--theme-primary)] hover:underline"
                       >
                         Forgot?
                       </button>
                     </div>
                     <div className="relative flex items-center">
-                      <Lock className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-secondary)]" />
+                      <Lock className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-muted)]" />
                       <input 
                         type="password" 
                         required
                         placeholder="••••••••••••" 
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-primary/50 transition-colors"
+                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-[var(--theme-primary)]/50 focus:ring-1 focus:ring-[var(--theme-primary)]/20 transition-all"
                       />
                     </div>
                   </div>
 
-                  <button 
+                  <motion.button 
                     type="submit" 
                     disabled={isLoading}
-                    className="w-full bg-primary hover:bg-primary/95 text-white font-semibold py-3 rounded-xl border border-primary/20 shadow-md cursor-pointer transition-colors mt-2 flex items-center justify-center gap-2"
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    className="w-full bg-[var(--theme-primary)] hover:opacity-90 text-white font-semibold py-3.5 rounded-xl shadow-lg cursor-pointer transition-all mt-2 flex items-center justify-center gap-2 btn-glow"
+                    style={{ boxShadow: 'var(--theme-glow-primary)' }}
                   >
-                    {isLoading ? 'Signing In...' : 'Sign In'}
-                  </button>
+                    {isLoading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Signing In...
+                      </>
+                    ) : 'Sign In'}
+                  </motion.button>
                 </form>
 
-                {/* Social Login Separator */}
+                {/* Social Login */}
                 <div className="relative flex py-2 items-center">
                   <div className="flex-grow border-t border-[var(--theme-divider)]"></div>
                   <span className="flex-shrink mx-4 text-[10px] text-[var(--theme-text-muted)] font-bold uppercase tracking-wider">Or continue with</span>
@@ -253,27 +299,31 @@ export const AuthPages: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={() => login('google.user@stripe.com')}
-                    className="flex items-center justify-center gap-2 border border-[var(--theme-border)] rounded-xl py-3 text-xs font-semibold hover:bg-[var(--theme-surface-hover)] transition-colors cursor-pointer bg-[var(--theme-surface-alt)]"
+                  <motion.button 
+                    onClick={() => login('google.user@company.com')}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex items-center justify-center gap-2 border border-[var(--theme-border)] rounded-xl py-3 text-xs font-semibold hover:bg-[var(--theme-surface-hover)] transition-all cursor-pointer bg-[var(--theme-surface-alt)] hover:border-[var(--theme-border-hover)]"
                   >
-                    <svg className="w-4 h-4 text-[#EA4335]" viewBox="0 0 24 24" fill="currentColor">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#EA4335' }}>
                       <path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-6.887 4.114-4.693 0-8.503-3.81-8.503-8.503s3.81-8.503 8.503-8.503c2.195 0 4.195.8 5.748 2.222L19.467 1.3A12.02 12.02 0 0012.24 0c-6.627 0-12 5.373-12 12s5.373 12 12 12c6.233 0 11.536-4.482 11.536-12 0-.852-.086-1.428-.24-1.715H12.24z"/>
                     </svg> Google
-                  </button>
-                  <button 
-                    onClick={() => login('github.user@stripe.com')}
-                    className="flex items-center justify-center gap-2 border border-[var(--theme-border)] rounded-xl py-3 text-xs font-semibold hover:bg-[var(--theme-surface-hover)] transition-colors cursor-pointer bg-[var(--theme-surface-alt)]"
+                  </motion.button>
+                  <motion.button 
+                    onClick={() => login('github.user@company.com')}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex items-center justify-center gap-2 border border-[var(--theme-border)] rounded-xl py-3 text-xs font-semibold hover:bg-[var(--theme-surface-hover)] transition-all cursor-pointer bg-[var(--theme-surface-alt)] hover:border-[var(--theme-border-hover)]"
                   >
                     <svg className="w-4 h-4 text-[var(--theme-text)]" viewBox="0 0 24 24" fill="currentColor">
                       <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
                     </svg> GitHub
-                  </button>
+                  </motion.button>
                 </div>
 
                 <p className="text-center text-xs text-[var(--theme-text-secondary)] mt-4">
                   New to IntellMeet?{' '}
-                  <button onClick={() => setAuthMode('signup')} className="text-primary font-bold hover:underline">
+                  <button onClick={() => setAuthMode('signup')} className="text-[var(--theme-primary)] font-bold hover:underline">
                     Create Account
                   </button>
                 </p>
@@ -291,8 +341,8 @@ export const AuthPages: React.FC = () => {
                 className="space-y-6"
               >
                 <div>
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--theme-text)]">Create Account</h1>
-                  <p className="text-xs text-[var(--theme-text-secondary)] mt-1">Join teams utilizing AI-driven workspaces</p>
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--theme-text)]" style={{ fontFamily: 'Space Grotesk' }}>Create Account</h1>
+                  <p className="text-xs text-[var(--theme-text-secondary)] mt-1.5">Join teams utilizing AI-driven workspaces</p>
                 </div>
 
                 {errorMsg && (
@@ -306,14 +356,14 @@ export const AuthPages: React.FC = () => {
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-[var(--theme-text)]">Full Name</label>
                     <div className="relative flex items-center">
-                      <User className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-secondary)]" />
+                      <User className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-muted)]" />
                       <input 
                         type="text" 
                         required
                         placeholder="Julian Carter" 
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-primary/50 transition-colors"
+                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-[var(--theme-primary)]/50 focus:ring-1 focus:ring-[var(--theme-primary)]/20 transition-all"
                       />
                     </div>
                   </div>
@@ -321,14 +371,14 @@ export const AuthPages: React.FC = () => {
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-[var(--theme-text)]">Email Address</label>
                     <div className="relative flex items-center">
-                      <Mail className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-secondary)]" />
+                      <Mail className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-muted)]" />
                       <input 
                         type="email" 
                         required
-                        placeholder="j.carter@stripe.com" 
+                        placeholder="j.carter@company.com" 
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-primary/50 transition-colors"
+                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-[var(--theme-primary)]/50 focus:ring-1 focus:ring-[var(--theme-primary)]/20 transition-all"
                       />
                     </div>
                   </div>
@@ -336,29 +386,32 @@ export const AuthPages: React.FC = () => {
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-[var(--theme-text)]">Password</label>
                     <div className="relative flex items-center">
-                      <Lock className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-secondary)]" />
+                      <Lock className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-muted)]" />
                       <input 
                         type="password" 
                         required
-                        placeholder="Choose password" 
+                        placeholder="Choose a strong password" 
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-primary/50 transition-colors"
+                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-[var(--theme-primary)]/50 focus:ring-1 focus:ring-[var(--theme-primary)]/20 transition-all"
                       />
                     </div>
                   </div>
 
-                  <button 
+                  <motion.button 
                     type="submit" 
-                    className="w-full bg-primary hover:bg-primary/95 text-white font-semibold py-3 rounded-xl border border-primary/20 shadow-md cursor-pointer transition-colors mt-2"
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    className="w-full bg-[var(--theme-primary)] hover:opacity-90 text-white font-semibold py-3.5 rounded-xl shadow-lg cursor-pointer transition-all mt-2 btn-glow"
+                    style={{ boxShadow: 'var(--theme-glow-primary)' }}
                   >
                     Send Verification Code
-                  </button>
+                  </motion.button>
                 </form>
 
                 <p className="text-center text-xs text-[var(--theme-text-secondary)] mt-4">
                   Already have an account?{' '}
-                  <button onClick={() => setAuthMode('login')} className="text-primary font-bold hover:underline">
+                  <button onClick={() => setAuthMode('login')} className="text-[var(--theme-primary)] font-bold hover:underline">
                     Sign In
                   </button>
                 </p>
@@ -376,8 +429,8 @@ export const AuthPages: React.FC = () => {
                 className="space-y-6"
               >
                 <div>
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--theme-text)]">Enter OTP Code</h1>
-                  <p className="text-xs text-[var(--theme-text-secondary)] mt-1">We sent a 4-digit code to your email {email}</p>
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--theme-text)]" style={{ fontFamily: 'Space Grotesk' }}>Enter OTP Code</h1>
+                  <p className="text-xs text-[var(--theme-text-secondary)] mt-1.5">We sent a 4-digit code to <span className="font-mono text-[var(--theme-primary)]">{email}</span></p>
                 </div>
 
                 {errorMsg && (
@@ -397,22 +450,24 @@ export const AuthPages: React.FC = () => {
                         maxLength={1}
                         value={code}
                         onChange={(e) => handleOtpChange(e.target.value, idx)}
-                        className="w-16 h-16 bg-[var(--theme-input-bg)] border-2 border-[var(--theme-border)] rounded-2xl text-center text-2xl font-bold text-[var(--theme-text)] focus:outline-none focus:border-primary/80 transition-all font-mono"
+                        className="w-16 h-16 bg-[var(--theme-input-bg)] border-2 border-[var(--theme-border)] rounded-2xl text-center text-2xl font-bold text-[var(--theme-text)] focus:outline-none focus:border-[var(--theme-primary)]/80 focus:ring-2 focus:ring-[var(--theme-primary)]/20 transition-all font-mono"
                       />
                     ))}
                   </div>
 
-                  <button 
+                  <motion.button 
                     type="submit" 
-                    className="w-full bg-accent hover:bg-accent/95 text-slate-950 font-bold py-3 rounded-xl border border-accent/20 shadow-md cursor-pointer transition-colors"
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl shadow-lg cursor-pointer transition-all btn-glow"
                   >
                     Verify & Join
-                  </button>
+                  </motion.button>
                 </form>
 
                 <p className="text-center text-xs text-[var(--theme-text-secondary)] mt-4">
                   Didn't receive code?{' '}
-                  <button type="button" onClick={() => alert('OTP Code Resent')} className="text-primary font-bold hover:underline">
+                  <button type="button" onClick={() => alert('OTP Code Resent')} className="text-[var(--theme-primary)] font-bold hover:underline">
                     Resend Code
                   </button>
                 </p>
@@ -430,8 +485,8 @@ export const AuthPages: React.FC = () => {
                 className="space-y-6"
               >
                 <div>
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--theme-text)]">Reset Password</h1>
-                  <p className="text-xs text-[var(--theme-text-secondary)] mt-1">Provide your registered email to reset password</p>
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--theme-text)]" style={{ fontFamily: 'Space Grotesk' }}>Reset Password</h1>
+                  <p className="text-xs text-[var(--theme-text-secondary)] mt-1.5">Provide your registered email to reset password</p>
                 </div>
 
                 {errorMsg && (
@@ -445,29 +500,32 @@ export const AuthPages: React.FC = () => {
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-[var(--theme-text)]">Email Address</label>
                     <div className="relative flex items-center">
-                      <Mail className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-secondary)]" />
+                      <Mail className="absolute left-3.5 w-4 h-4 text-[var(--theme-text-muted)]" />
                       <input 
                         type="email" 
                         required
-                        placeholder="j.carter@stripe.com" 
+                        placeholder="j.carter@company.com" 
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-primary/50 transition-colors"
+                        className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl pl-10.5 pr-4 py-3 text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-[var(--theme-primary)]/50 focus:ring-1 focus:ring-[var(--theme-primary)]/20 transition-all"
                       />
                     </div>
                   </div>
 
-                  <button 
+                  <motion.button 
                     type="submit" 
-                    className="w-full bg-primary hover:bg-primary/95 text-white font-semibold py-3 rounded-xl border border-primary/20 shadow-md cursor-pointer transition-colors mt-2"
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    className="w-full bg-[var(--theme-primary)] hover:opacity-90 text-white font-semibold py-3.5 rounded-xl shadow-lg cursor-pointer transition-all mt-2 btn-glow"
+                    style={{ boxShadow: 'var(--theme-glow-primary)' }}
                   >
                     Send Recovery Instructions
-                  </button>
+                  </motion.button>
                 </form>
 
                 <p className="text-center text-xs text-[var(--theme-text-secondary)] mt-4">
                   Remember password?{' '}
-                  <button onClick={() => setAuthMode('login')} className="text-primary font-bold hover:underline">
+                  <button onClick={() => setAuthMode('login')} className="text-[var(--theme-primary)] font-bold hover:underline">
                     Back to Sign In
                   </button>
                 </p>
