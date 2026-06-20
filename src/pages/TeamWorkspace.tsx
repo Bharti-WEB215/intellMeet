@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { GlassCard } from '../components/GlassCard';
 import { 
   Hash, FileText, Plus, Clock, Download, 
-  Save, Activity, Paperclip 
+  Save, Activity, Paperclip, Send 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { api } from '../services/api.js';
 
 export const TeamWorkspace: React.FC = () => {
   const {
@@ -25,6 +26,43 @@ export const TeamWorkspace: React.FC = () => {
   const [newDocContent, setNewDocContent] = useState('');
   const [isCreatingDoc, setIsCreatingDoc] = useState(false);
   const [newFileName, setNewFileName] = useState('');
+  const [channelMessages, setChannelMessages] = useState<any[]>([]);
+  const [messageInput, setMessageInput] = useState('');
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
+
+  // Fetch messages when active channel changes
+  useEffect(() => {
+    if (!workspaceActiveChannelId) return;
+    const fetchMessages = async () => {
+      setLoadingMessages(true);
+      try {
+        const msgs = await api.workspace.getMessages(workspaceActiveChannelId);
+        setChannelMessages(Array.isArray(msgs) ? msgs : []);
+      } catch (err) {
+        console.error('Failed to load channel messages:', err);
+        setChannelMessages([]);
+      } finally {
+        setLoadingMessages(false);
+      }
+    };
+    fetchMessages();
+  }, [workspaceActiveChannelId]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!messageInput.trim() || !workspaceActiveChannelId) return;
+    setSendingMessage(true);
+    try {
+      const sentMsg = await api.workspace.postMessage(workspaceActiveChannelId, messageInput.trim());
+      setChannelMessages(prev => [...prev, sentMsg]);
+      setMessageInput('');
+    } catch (err) {
+      console.error('Failed to send message:', err);
+    } finally {
+      setSendingMessage(false);
+    }
+  };
 
   // Active items
   const activeDoc = workspaceDocuments.find(d => d.id === workspaceActiveDocumentId) || workspaceDocuments[0];
@@ -141,6 +179,10 @@ export const TeamWorkspace: React.FC = () => {
               </div>
               <div className="relative">
                 <img className="w-6 h-6 rounded-full object-cover border border-[var(--theme-surface)]" src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=60" alt="Elena" />
+                <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-[var(--theme-surface)]" />
+              </div>
+              <div className="relative">
+                <img className="w-6 h-6 rounded-full object-cover border border-[var(--theme-surface)]" src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=60" alt="Mia" />
                 <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-[var(--theme-surface)]" />
               </div>
             </div>
@@ -270,6 +312,62 @@ export const TeamWorkspace: React.FC = () => {
             )}
 
           </AnimatePresence>
+        </GlassCard>
+
+        {/* Channel Messages Panel */}
+        <GlassCard className="border-[var(--theme-border)] p-4 flex flex-col space-y-3 max-h-[320px]">
+          <div className="flex justify-between items-center pb-2 border-b border-[var(--theme-divider)]">
+            <h3 className="text-xs font-bold text-[var(--theme-text-secondary)] flex items-center gap-1.5">
+              <Hash className="w-4 h-4 text-primary" /> {workspaceChannels.find(c => c.id === workspaceActiveChannelId)?.name || 'Channel'} Messages
+            </h3>
+            <span className="text-[10px] bg-[var(--theme-surface-alt)] px-2 py-0.5 rounded font-mono font-bold text-[var(--theme-text-secondary)]">{channelMessages.length} msgs</span>
+          </div>
+
+          {/* Messages list */}
+          <div className="flex-1 overflow-y-auto space-y-2 pr-1" style={{ minHeight: '120px', maxHeight: '180px' }}>
+            {loadingMessages ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : channelMessages.length > 0 ? (
+              channelMessages.map((msg: any, idx: number) => (
+                <div key={msg.id || idx} className="flex items-start space-x-2">
+                  <img
+                    className="w-5 h-5 rounded-full object-cover border border-[var(--theme-border)] mt-0.5 flex-shrink-0"
+                    src={msg.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.user_name || msg.user || 'U')}&background=6D5DFC&color=fff&size=40`}
+                    alt={msg.user_name || msg.user || 'User'}
+                  />
+                  <div className="min-w-0">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-[10px] font-bold text-[var(--theme-text)]">{msg.user_name || msg.user || 'User'}</span>
+                      <span className="text-[8px] text-[var(--theme-text-muted)] font-mono">{msg.time || (msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')}</span>
+                    </div>
+                    <p className="text-[10px] text-[var(--theme-text-secondary)] leading-relaxed break-words">{msg.text || msg.content || msg.message || ''}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-[10px] text-[var(--theme-text-muted)] font-mono italic flex items-center justify-center h-full">No messages in this channel yet.</div>
+            )}
+          </div>
+
+          {/* Message input */}
+          <form onSubmit={handleSendMessage} className="flex gap-1.5 pt-2 border-t border-[var(--theme-divider)]">
+            <input
+              type="text"
+              placeholder="Type a message..."
+              value={messageInput}
+              onChange={(e) => setMessageInput(e.target.value)}
+              className="flex-1 bg-[var(--theme-bg)] border border-[var(--theme-border)] rounded-lg px-2.5 py-1.5 text-[10px] text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-primary/40 transition-colors"
+            />
+            <button
+              type="submit"
+              disabled={sendingMessage || !messageInput.trim()}
+              className="bg-primary text-white font-bold text-[10px] px-2.5 rounded-lg hover:bg-primary/90 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              <Send className="w-3 h-3" /> Send
+            </button>
+          </form>
         </GlassCard>
 
       </div>
