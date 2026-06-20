@@ -43,10 +43,12 @@ export const App: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   React.useEffect(() => {
-    if (localStorage.getItem('intellmeet_token')) {
+    const token = localStorage.getItem('intellmeet_jwt');
+    if (token) {
+      setCurrentView('dashboard');
       initializeStore();
     }
-  }, [initializeStore]);
+  }, [initializeStore, setCurrentView]);
 
   // If viewing marketing landing page, skip shell
   if (currentView === 'landing') {

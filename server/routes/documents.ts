@@ -1,44 +1,80 @@
-// routes/documents.ts
+// routes/documents.ts — MongoDB/Mongoose rewrite
 import express from 'express';
-import { verifyAuth, AuthenticatedRequest } from '../middleware/auth.js';
-import { query } from '../db/db.js';
+import { verifyToken, AuthRequest } from '../middleware/jwt-auth.js';
+import { Doc, ActivityLog } from '../models/index.js';
 
 const router = express.Router();
 
 // Get all documents
-router.get('/', verifyAuth, async (req, res) => {
+router.get('/', verifyToken, async (req: AuthRequest, res) => {
   try {
-    const result = await query('SELECT * FROM documents ORDER BY created_at DESC');
-    res.json(result.rows);
+    const docs = await Doc.find().sort({ createdAt: -1 });
+    res.json(docs);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch documents', details: err.message });
   }
 });
 
 // Create a new document
-router.post('/', verifyAuth, async (req: AuthenticatedRequest, res) => {
-  const { title, content } = req.body;
-  if (!title) return res.status(400).json({ error: 'Document title is required' });
-
-  const id = `doc-${Math.random().toString(36).substr(2, 9)}`;
-  const author = req.user?.name || 'Julian Carter';
-
+router.post('/', verifyToken, async (req: AuthRequest, res) => {
   try {
-    const result = await query(
-      'INSERT INTO documents(id, title, content, author, last_updated) VALUES($1, $2, $3, $4, $5) RETURNING *',
-      [id, title, content || '', author, 'Just now']
-    );
+    const { title, content } = req.body;
+    if (!title) return res.status(400).json({ error: 'Document title is required' });
 
-    // Seed activity logs
-    const actId = `act-${Math.random().toString(36).substr(2, 9)}`;
-    await query(
-      'INSERT INTO activity_logs(id, user_name, avatar, action, time) VALUES($1, $2, $3, $4, $5)',
-      [actId, author, req.user?.avatar || '', `created document: "${title}"`, 'Just now']
-    );
+    const doc = await Doc.create({
+      title,
+      content: content || '',
+      authorId: req.userId,
+      authorName: req.user?.name || 'Unknown',
+      lastUpdated: new Date().toLocaleDateString(),
+    });
 
-    res.status(201).json(result.rows[0]);
+    // Log activity
+    await ActivityLog.create({
+      userId: req.userId,
+      userName: req.user?.name || 'Unknown',
+      userAvatar: req.user?.avatar || '',
+      action: `created document: "${title}"`,
+    });
+
+    res.status(201).json(doc);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to create document', details: err.message });
+  }
+});
+
+// Update a document
+router.put('/:id', verifyToken, async (req: AuthRequest, res) => {
+  try {
+    const { title, content } = req.body;
+
+    const updated = await Doc.findByIdAndUpdate(
+      req.params.id,
+      {
+        ...(title !== undefined && { title }),
+        ...(content !== undefined && { content }),
+        lastUpdated: new Date().toLocaleDateString(),
+      },
+      { new: true }
+    );
+
+    if (!updated) return res.status(404).json({ error: 'Document not found' });
+
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update document', details: err.message });
+  }
+});
+
+// Delete a document
+router.delete('/:id', verifyToken, async (req: AuthRequest, res) => {
+  try {
+    const deleted = await Doc.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Document not found' });
+
+    res.json({ success: true, message: 'Document deleted' });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to delete document', details: err.message });
   }
 });
 

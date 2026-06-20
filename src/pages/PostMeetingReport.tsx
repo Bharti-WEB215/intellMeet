@@ -1,5 +1,5 @@
 // PostMeetingReport.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { GlassCard } from '../components/GlassCard.js';
 import { useStore } from '../store/useStore.js';
 import { 
@@ -7,6 +7,10 @@ import {
   Link2, CheckCircle2, BarChart2, Smile, Target, Users 
 } from 'lucide-react';
 import { api } from '../services/api.js';
+// @ts-ignore
+import jsPDF from 'jspdf';
+// @ts-ignore
+import html2canvas from 'html2canvas';
 
 interface MeetingReport {
   summary: {
@@ -35,7 +39,10 @@ export const PostMeetingReport: React.FC = () => {
   const { setCurrentView, addNotification, tasks, activeMeetingId, fetchTasks } = useStore();
   const [report, setReport] = useState<MeetingReport | null>(null);
   const [meetingTitle, setMeetingTitle] = useState('Sync Sync Session');
+  const [participants, setParticipants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -51,12 +58,40 @@ export const PostMeetingReport: React.FC = () => {
       }
 
       try {
-        const [summaryResult, mtgDetails] = await Promise.all([
-          api.meetings.getSummary(targetMtgId),
-          api.meetings.get(targetMtgId)
+        const [summaryResult, mtgDetails, participantList] = await Promise.all([
+          api.meetings.getSummary(targetMtgId).catch(() => null),
+          api.meetings.get(targetMtgId).catch(() => null),
+          api.meetings.getParticipants(targetMtgId).catch(() => [])
         ]);
-        setReport(summaryResult);
-        setMeetingTitle(mtgDetails.title);
+
+        const fallbackSummary = {
+          summary: {
+            summary: "No recent meetings to report on. The data here is a placeholder until a meeting completes.",
+            decisions: ["Start using the new meeting features"],
+            actionItems: ["Schedule the next team sync"],
+            risks: ["Low team engagement without proper scheduling"],
+            nextSteps: ["Define OKRs for next quarter"]
+          },
+          analytics: {
+            positive_percent: 75,
+            neutral_percent: 15,
+            negative_percent: 10,
+            stress_percent: 30,
+            engagement_percent: 85,
+            collaboration_percent: 80,
+            decision_quality: 90,
+            focus_score: 85,
+            energy_score: 80,
+            participation_balance: 75,
+            actionability: 85
+          }
+        };
+
+        const safeMtgDetails = mtgDetails || { title: 'Sync Session' };
+        
+        setReport(summaryResult || fallbackSummary);
+        setMeetingTitle(safeMtgDetails.title);
+        setParticipants(Array.isArray(participantList) ? participantList : []);
         fetchTasks();
       } catch (err) {
         console.error('Failed to load meeting outcome dossier:', err);
@@ -68,8 +103,44 @@ export const PostMeetingReport: React.FC = () => {
     fetchReport();
   }, [activeMeetingId, fetchTasks]);
 
-  const handleExport = (format: string) => {
-    addNotification(`Exporting meeting dossier in ${format} format...`, 'success');
+  const handleExportPDF = async () => {
+    if (!reportRef.current) return;
+    setExporting(true);
+    try {
+      addNotification('Generating PDF dossier...', 'success');
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#0f0f14'
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`${meetingTitle.replace(/\s+/g, '_')}_report.pdf`);
+      addNotification('PDF exported successfully!', 'success');
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      addNotification('Failed to export PDF. Please try again.', 'warning');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleEmailCopy = () => {
+    if (!report) return;
+    const textReport = [
+      `Meeting: ${meetingTitle}`,
+      `\nExecutive Summary:\n${report.summary.summary}`,
+      `\nKey Decisions:\n${report.summary.decisions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`,
+      `\nAction Items:\n${report.summary.actionItems.map((a, i) => `${i + 1}. ${a}`).join('\n')}`,
+      `\nRisks:\n${report.summary.risks.map((r, i) => `${i + 1}. ${r}`).join('\n')}`,
+      `\nNext Steps:\n${report.summary.nextSteps.map((n, i) => `${i + 1}. ${n}`).join('\n')}`,
+      report.analytics ? `\nSession Metrics:\n- Collaboration: ${report.analytics.collaboration_percent}%\n- Focus: ${report.analytics.focus_score}%\n- Engagement: ${report.analytics.engagement_percent}%\n- Stress: ${report.analytics.stress_percent}%` : ''
+    ].join('\n');
+    navigator.clipboard.writeText(textReport);
+    addNotification('Report copied to clipboard — paste into your email client!', 'success');
   };
 
   if (loading || !report) {
@@ -87,7 +158,7 @@ export const PostMeetingReport: React.FC = () => {
   const meetingTasks = tasks.filter(t => t.id.includes('tsk') || t.title.length > 0);
 
   return (
-    <div className="space-y-6 w-full text-[var(--theme-text)] pb-12 animate-fadeIn">
+    <div ref={reportRef} className="space-y-6 w-full text-[var(--theme-text)] pb-12 animate-fadeIn">
       
       {/* Top Header Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--theme-divider)] pb-4">
@@ -107,16 +178,17 @@ export const PostMeetingReport: React.FC = () => {
         {/* Export buttons */}
         <div className="flex items-center space-x-2">
           <button 
-            onClick={() => handleExport('PDF')}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[var(--theme-surface)] border border-[var(--theme-border)] rounded-xl hover:bg-[var(--theme-surface-hover)] transition-colors text-xs font-semibold cursor-pointer"
+            onClick={handleExportPDF}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-2 bg-[var(--theme-surface)] border border-[var(--theme-border)] rounded-xl hover:bg-[var(--theme-surface-hover)] transition-colors text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
-            <Download className="w-3.5 h-3.5" /> PDF
+            <Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting...' : 'PDF'}
           </button>
           <button 
-            onClick={() => handleExport('Email')}
+            onClick={handleEmailCopy}
             className="flex items-center gap-1.5 px-3 py-2 bg-[var(--theme-surface)] border border-[var(--theme-border)] rounded-xl hover:bg-[var(--theme-surface-hover)] transition-colors text-xs font-semibold cursor-pointer"
           >
-            <Mail className="w-3.5 h-3.5" /> Email
+            <Mail className="w-3.5 h-3.5" /> Copy for Email
           </button>
           <button 
             onClick={() => {
@@ -279,11 +351,22 @@ export const PostMeetingReport: React.FC = () => {
               <Users className="w-4 h-4 text-[var(--theme-text-secondary)]" /> Attendance Roster
             </h3>
             <div className="flex -space-x-2 items-center">
-              <img className="w-7 h-7 rounded-full border-2 border-[var(--theme-surface)] object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80" alt="avatar" />
-              <img className="w-7 h-7 rounded-full border-2 border-[var(--theme-surface)] object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80" alt="avatar" />
-              <img className="w-7 h-7 rounded-full border-2 border-[var(--theme-surface)] object-cover" src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80" alt="avatar" />
-              <img className="w-7 h-7 rounded-full border-2 border-[var(--theme-surface)] object-cover" src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80" alt="avatar" />
-              <span className="pl-4 text-[10px] text-[var(--theme-text-secondary)] font-bold font-mono">100% ATTENDANCE</span>
+              {participants.length > 0 ? (
+                <>
+                  {participants.map((p: any, idx: number) => (
+                    <img
+                      key={p.id || idx}
+                      className="w-7 h-7 rounded-full border-2 border-[var(--theme-surface)] object-cover"
+                      src={p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name || 'User')}&background=6D5DFC&color=fff&size=80`}
+                      alt={p.name || 'Participant'}
+                      title={p.name || 'Participant'}
+                    />
+                  ))}
+                  <span className="pl-4 text-[10px] text-[var(--theme-text-secondary)] font-bold font-mono">{participants.length} ATTENDEE{participants.length !== 1 ? 'S' : ''}</span>
+                </>
+              ) : (
+                <span className="text-[10px] text-[var(--theme-text-muted)] font-mono italic">No attendance data available</span>
+              )}
             </div>
           </GlassCard>
 

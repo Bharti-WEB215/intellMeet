@@ -17,20 +17,8 @@ interface DashboardMetrics {
   avgMeetingDuration: number;
 }
 
-const trendData = [
-  { week: 'Week 1', effectiveness: 72, productivity: 68 },
-  { week: 'Week 2', effectiveness: 78, productivity: 75 },
-  { week: 'Week 3', effectiveness: 84, productivity: 80 },
-  { week: 'Week 4', effectiveness: 89, productivity: 84 },
-];
 
-const attendanceData = [
-  { day: 'Mon', count: 2 },
-  { day: 'Tue', count: 4 },
-  { day: 'Wed', count: 3 },
-  { day: 'Thu', count: 2 },
-  { day: 'Fri', count: 1 },
-];
+
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -48,12 +36,34 @@ const staggerItem = {
 export const AnalyticsCenter: React.FC = () => {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [trendData, setTrendData] = useState<Array<{week: string; effectiveness: number; productivity: number}>>([]);
+  const [attendanceData, setAttendanceData] = useState<Array<{day: string; count: number}>>([]);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const data = await api.analytics.getDashboard();
-        setMetrics(data);
+        const [dashData, trends, attendance] = await Promise.all([
+          api.analytics.getDashboard().catch(() => null),
+          api.analytics.getTrends().catch(() => []),
+          api.analytics.getAttendance().catch(() => []),
+        ]);
+        
+        const fallbackMDetails = {
+          totalMeetings: 0,
+          activeMeetings: 0,
+          totalTasks: 0,
+          completedTasks: 0,
+          activeUsers: 1,
+          taskCompletionRate: 0,
+          aiInsightsGenerated: 0,
+          avgMeetingDuration: 0,
+          recentMeetings: [],
+          averageSentiment: 85
+        };
+
+        setMetrics(dashData || fallbackMDetails);
+        if (trends && trends.length) setTrendData(trends);
+        if (attendance && attendance.length) setAttendanceData(attendance);
       } catch (err) {
         console.error('Failed to fetch executive metrics:', err);
       } finally {

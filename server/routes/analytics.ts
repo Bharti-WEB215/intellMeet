@@ -1,104 +1,233 @@
-// routes/analytics.ts
+// routes/analytics.ts — MongoDB/Mongoose rewrite with aggregation pipelines
 import express from 'express';
-import { verifyAuth } from '../middleware/auth.js';
-import { query } from '../db/db.js';
+import { verifyToken, AuthRequest } from '../middleware/jwt-auth.js';
+import {
+  Meeting,
+  Task,
+  User,
+  MeetingAnalytics,
+  SentimentScore,
+} from '../models/index.js';
+import { cacheGet, cacheSet } from '../db/redis.js';
 
 const router = express.Router();
 
-// Get aggregated dashboard metrics
-router.get('/dashboard', verifyAuth, async (req, res) => {
+// ─── Dashboard Metrics (cached) ───
+router.get('/dashboard', verifyToken, async (req: AuthRequest, res) => {
   try {
-    const totalMeetingsRes = await query('SELECT COUNT(*) FROM meetings');
-    const completedTasksRes = await query("SELECT COUNT(*) FROM tasks WHERE status = 'done'");
-    const totalTasksRes = await query('SELECT COUNT(*) FROM tasks');
-    
-    const totalMeetings = parseInt(totalMeetingsRes.rows[0].count || '0');
-    const completedTasks = parseInt(completedTasksRes.rows[0].count || '0');
-    const totalTasks = parseInt(totalTasksRes.rows[0].count || '0');
-    
-    // Calculate task completion rate
-    const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 75;
+    const cacheKey = `analytics:dashboard:${req.userId}`;
+    const cached = await cacheGet<any>(cacheKey);
+    if (cached) return res.json(cached);
 
-    // Fetch average sentiment
-    const avgSentimentRes = await query('SELECT AVG(positive_percent) as avg_pos FROM meeting_analytics');
-    const avgPositive = Math.round(parseFloat(avgSentimentRes.rows[0].avg_pos || '78'));
+    // Run counts in parallel
+    const [
+      totalMeetings,
+      activeMeetings,
+      totalTasks,
+      completedTasks,
+      activeUsers,
+      avgDurationResult,
+      recentMeetings,
+    ] = await Promise.all([
+      Meeting.countDocuments(),
+      Meeting.countDocuments({ status: 'active' }),
+      Task.countDocuments({ creatorId: req.userId }),
+      Task.countDocuments({ creatorId: req.userId, status: 'done' }),
+      User.countDocuments(),
+      Meeting.aggregate([
+        { $match: { status: 'completed', duration: { $gt: 0 } } },
+        { $group: { _id: null, avgDuration: { $avg: '$duration' } } },
+      ]),
+      Meeting.find()
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .populate('creatorId', 'name avatar'),
+    ]);
 
-    res.json({
-      meetingsToday: Math.max(1, totalMeetings),
-      activeUsers: 8,
-      generatedTasks: totalTasks,
-      completedTasks: completedTasks,
+    const avgMeetingDuration = avgDurationResult.length > 0
+      ? Math.round(avgDurationResult[0].avgDuration / 60) // seconds → minutes
+      : 0;
+
+    const taskCompletionRate = totalTasks > 0
+      ? Math.round((completedTasks / totalTasks) * 100)
+      : 0;
+
+    const dashboard = {
+      totalMeetings,
+      activeMeetings,
+      totalTasks,
+      completedTasks,
+      activeUsers,
+      avgMeetingDuration,
+      taskCompletionRate,
       aiInsightsGenerated: totalMeetings * 3 + 12,
-      averageSentiment: avgPositive || 82,
-      taskCompletionRate: taskCompletionRate,
-      avgMeetingDuration: 42 // in minutes
-    });
+      recentMeetings,
+    };
+
+    // Cache for 60 seconds
+    await cacheSet(cacheKey, dashboard, 60);
+
+    res.json(dashboard);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to aggregate analytics', details: err.message });
   }
 });
 
-// Get meeting DNA radar metrics by meeting ID
-router.get('/meetings/:id/dna', verifyAuth, async (req, res) => {
+// ─── Trends: Weekly meeting stats for last 8 weeks ───
+router.get('/trends', verifyToken, async (req: AuthRequest, res) => {
   try {
-    const result = await query('SELECT * FROM meeting_analytics WHERE meeting_id = $1 LIMIT 1', [req.params.id]);
-    
-    if (result.rows.length === 0) {
-      // Return realistic defaults if report is requested for a new session
+    const cacheKey = `analytics:trends:${req.userId}`;
+    const cached = await cacheGet<any>(cacheKey);
+    if (cached) return res.json(cached);
+
+    const eightWeeksAgo = new Date();
+    eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
+
+    const trends = await Meeting.aggregate([
+      { $match: { createdAt: { $gte: eightWeeksAgo } } },
+      {
+        $group: {
+          _id: {
+            year: { $isoWeekYear: '$createdAt' },
+            week: { $isoWeek: '$createdAt' },
+          },
+          meetingCount: { $sum: 1 },
+          avgDuration: { $avg: { $ifNull: ['$duration', 0] } },
+        },
+      },
+      { $sort: { '_id.year': 1, '_id.week': 1 } },
+      { $limit: 8 },
+      {
+        $project: {
+          _id: 0,
+          week: { $concat: ['W', { $toString: '$_id.week' }] },
+          year: '$_id.year',
+          meetingCount: 1,
+          avgDuration: { $round: [{ $divide: ['$avgDuration', 60] }, 1] },
+        },
+      },
+    ]);
+
+    // Enrich with avg sentiment per week by joining SentimentScore via meetings
+    const enrichedTrends = await Promise.all(
+      trends.map(async (weekData) => {
+        // For simplicity, return base trend data; sentiment per-week requires
+        // cross-collection joins which we keep lightweight here
+        return {
+          ...weekData,
+          avgSentiment: null,   // Can be enriched later with $lookup
+          avgEngagement: null,
+        };
+      })
+    );
+
+    await cacheSet(cacheKey, enrichedTrends, 120);
+
+    res.json(enrichedTrends);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to compute trends', details: err.message });
+  }
+});
+
+// ─── Attendance: Meetings grouped by day-of-week ───
+router.get('/attendance', verifyToken, async (req: AuthRequest, res) => {
+  try {
+    const cacheKey = 'analytics:attendance';
+    const cached = await cacheGet<any>(cacheKey);
+    if (cached) return res.json(cached);
+
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    const attendance = await Meeting.aggregate([
+      {
+        $group: {
+          _id: { $dayOfWeek: '$createdAt' }, // 1=Sun, 7=Sat
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    // Map to full week with zero-fills
+    const result = dayNames.map((name, idx) => {
+      const dayNum = idx + 1; // $dayOfWeek: 1=Sun
+      const found = attendance.find((a) => a._id === dayNum);
+      return { day: name, meetings: found ? found.count : 0 };
+    });
+
+    await cacheSet(cacheKey, result, 120);
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to compute attendance', details: err.message });
+  }
+});
+
+// ─── Meeting DNA radar metrics ───
+router.get('/meetings/:id/dna', verifyToken, async (req: AuthRequest, res) => {
+  try {
+    const analytics = await MeetingAnalytics.findOne({ meetingId: req.params.id });
+
+    if (!analytics) {
+      // Return realistic defaults for a meeting without analytics yet
       return res.json({
-        meeting_id: req.params.id,
-        positive_percent: 78,
-        neutral_percent: 18,
-        negative_percent: 4,
-        stress_percent: 12,
-        engagement_percent: 88,
-        collaboration_percent: 84,
+        meetingId: req.params.id,
+        collaboration: 84,
+        focus: 82,
+        engagement: 88,
         decision_quality: 90,
-        focus_score: 82,
-        energy_score: 76,
+        energy: 76,
         participation_balance: 85,
-        actionability: 90
       });
     }
 
-    res.json(result.rows[0]);
+    res.json({
+      meetingId: analytics.meetingId,
+      collaboration: analytics.collaborationPercent,
+      focus: analytics.focusScore,
+      engagement: analytics.engagementPercent,
+      decision_quality: analytics.decisionQuality,
+      energy: analytics.energyScore,
+      participation_balance: analytics.participationBalance,
+      // Also include full analytics for detailed views
+      positivePercent: analytics.positivePercent,
+      neutralPercent: analytics.neutralPercent,
+      negativePercent: analytics.negativePercent,
+      stressPercent: analytics.stressPercent,
+      actionability: analytics.actionability,
+    });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve meeting DNA', details: err.message });
   }
 });
 
-// Get sentiment timelines for charts by meeting ID
-router.get('/meetings/:id/sentiment', verifyAuth, async (req, res) => {
+// ─── Sentiment timeline for charts ───
+router.get('/meetings/:id/sentiment', verifyToken, async (req: AuthRequest, res) => {
   try {
-    const result = await query(
-      'SELECT positive, neutral, negative, stress, engagement, collaboration, timestamp FROM sentiment_scores WHERE meeting_id = $1 ORDER BY timestamp ASC',
-      [req.params.id]
-    );
+    const scores = await SentimentScore.find({ meetingId: req.params.id })
+      .sort({ timestamp: 1 });
 
-    if (result.rows.length === 0) {
-      // Mock history timeline for Recharts visual
+    if (scores.length === 0) {
+      // Return mock timeline for Recharts visual when no data exists
       const mockTimeline = [
-        { time: '10:00', Positive: 60, Neutral: 30, Negative: 10, Stress: 15, Engagement: 70, Collaboration: 65 },
-        { time: '10:10', Positive: 68, Neutral: 25, Negative: 7, Stress: 18, Engagement: 82, Collaboration: 75 },
-        { time: '10:20', Positive: 75, Neutral: 20, Negative: 5, Stress: 12, Engagement: 90, Collaboration: 88 },
-        { time: '10:30', Positive: 70, Neutral: 22, Negative: 8, Stress: 25, Engagement: 80, Collaboration: 82 },
-        { time: '10:40', Positive: 82, Neutral: 15, Negative: 3, Stress: 10, Engagement: 92, Collaboration: 90 }
+        { time: '10:00', Positive: 60, Neutral: 30, Negative: 10 },
+        { time: '10:10', Positive: 68, Neutral: 25, Negative: 7 },
+        { time: '10:20', Positive: 75, Neutral: 20, Negative: 5 },
+        { time: '10:30', Positive: 70, Neutral: 22, Negative: 8 },
+        { time: '10:40', Positive: 82, Neutral: 15, Negative: 3 },
       ];
       return res.json(mockTimeline);
     }
 
     // Format for Recharts consumption
-    const formatted = result.rows.map((row, index) => {
-      const t = new Date(row.timestamp);
+    const formatted = scores.map((score) => {
+      const t = new Date(score.timestamp);
       const timeStr = `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}`;
       return {
         time: timeStr,
-        Positive: row.positive,
-        Neutral: row.neutral,
-        Negative: row.negative,
-        Stress: row.stress,
-        Engagement: row.engagement,
-        Collaboration: row.collaboration
+        Positive: score.positive,
+        Neutral: score.neutral,
+        Negative: score.negative,
       };
     });
 

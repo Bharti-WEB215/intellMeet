@@ -116,8 +116,9 @@ interface StoreState {
   setCommandMenuOpen: (open: boolean) => void;
   toggleTheme: () => void;
   setTheme: (theme: ThemeType) => void;
-  login: (email: string) => Promise<void>;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
   addNotification: (text: string, type?: 'success' | 'info' | 'warning') => void;
   removeNotification: (id: string) => void;
   
@@ -230,6 +231,13 @@ export const useStore = create<StoreState>((set, get) => ({
   
   // Initialize and Sync Store Data
   initializeStore: async () => {
+    // Guard: don't fire API calls if user has no token
+    const token = localStorage.getItem('intellmeet_jwt');
+    if (!token) {
+      set({ currentView: 'landing' });
+      return;
+    }
+
     try {
       const [profile, channels, tasks, docs, files, activities, notifs] = await Promise.all([
         api.auth.getProfile().catch(() => null),
@@ -241,8 +249,15 @@ export const useStore = create<StoreState>((set, get) => ({
         api.notifications.list().catch(() => [])
       ]);
 
+      // If profile fetch failed, token is invalid — go back to landing
+      if (!profile) {
+        localStorage.removeItem('intellmeet_jwt');
+        set({ currentView: 'landing', user: null });
+        return;
+      }
+
       set({
-        user: profile || get().user,
+        user: profile,
         workspaceChannels: channels.length ? channels : get().workspaceChannels,
         tasks: tasks.length ? tasks.map(mapDbTask) : get().tasks,
         workspaceDocuments: docs.length ? docs.map((d: any) => ({
@@ -303,9 +318,6 @@ export const useStore = create<StoreState>((set, get) => ({
   // Navigation Actions
   setCurrentView: (view) => {
     set({ currentView: view });
-    if (view !== 'landing' && view !== 'auth') {
-      get().initializeStore();
-    }
   },
   setAuthMode: (mode) => set({ authMode: mode }),
   setCommandMenuOpen: (open) => set({ commandMenuOpen: open }),
@@ -320,38 +332,39 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ theme });
   },
   
-  login: async (email) => {
-    localStorage.setItem('intellmeet_token', `dev-token-${email}`);
+  login: async (email, password) => {
     try {
-      const profile = await api.auth.getProfile();
+      const response = await api.auth.login(email, password);
+      const { token, user: profile } = response;
+      localStorage.setItem('intellmeet_jwt', token);
       set({ user: profile, currentView: 'dashboard' });
       get().addNotification(`Successfully logged in as ${profile.name}`, 'success');
       get().initializeStore();
     } catch (err: any) {
-      console.warn('Backend server unreachable. Falling back to offline sandbox mode...', err);
-      const defaultName = email.split('@')[0].replace('.', ' ');
-      const formattedName = defaultName.charAt(0).toUpperCase() + defaultName.slice(1);
-      
-      const localProfile = {
-        name: formattedName,
-        email: email,
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&fit=crop&q=80',
-        role: 'Senior Project Architect',
-        company: 'IntellMeet Sandbox'
-      };
-      
-      set({ 
-        user: localProfile, 
-        currentView: 'dashboard' 
-      });
-      
-      get().addNotification('Server offline. Entered offline sandbox mode.', 'info');
-      get().initializeStore().catch(() => {});
+      throw err;
     }
   },
 
-  logout: () => {
-    localStorage.removeItem('intellmeet_token');
+  register: async (name, email, password) => {
+    try {
+      const response = await api.auth.register(name, email, password);
+      const { token, user: profile } = response;
+      localStorage.setItem('intellmeet_jwt', token);
+      set({ user: profile, currentView: 'dashboard' });
+      get().addNotification(`Welcome to IntellMeet, ${profile.name}!`, 'success');
+      get().initializeStore();
+    } catch (err: any) {
+      throw err;
+    }
+  },
+
+  logout: async () => {
+    try {
+      await api.auth.logout();
+    } catch (_) {
+      // proceed with local cleanup even if server call fails
+    }
+    localStorage.removeItem('intellmeet_jwt');
     set({ user: null, currentView: 'landing' });
   },
   
@@ -520,8 +533,8 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
   
-  // AI Copilot responses
-  sendCopilotMessage: (text) => {
+  // AI Copilot responses — real API call
+  sendCopilotMessage: async (text) => {
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const userMsg: Message = { id: `msg-${Date.now()}`, sender: 'user', text, timestamp };
     
@@ -529,72 +542,15 @@ export const useStore = create<StoreState>((set, get) => ({
       aiMessages: [...state.aiMessages, userMsg],
       isAiTyping: true
     }));
-    
-    // Process input message through OpenAI or simple logic
-    setTimeout(() => {
-      let aiText = "I received your request. How can I assist you further with this meeting's metrics?";
-      const cleaned = text.toLowerCase().trim();
-      
-      if (cleaned.startsWith('/summary')) {
-        aiText = `### Meeting Executive Summary
-- **Primary Objective**: Align on UI/UX frameworks for the IntellMeet beta launch.
-- **Key Takeaways**:
-  - The design team demonstrated the floating Glass Control Dock.
-  - Vercel components are approved, using Tailwind CSS v4 variables for smooth micro-animations.
-  - Development team will focus on the Kanban task drag-and-drop workspace layout.
-- **Decisions Made**: Standardize theme values around deep background (#070B14) and glassmorphic panels (#0F172A).`;
-      } else if (cleaned.startsWith('/tasks')) {
-        aiText = `### Extracted Action Items
-I've successfully identified 3 new key tasks from the discussion:
-1. **[TODO]** Alex: Configure radar charts in \`MeetingDNA.tsx\` (Due: June 10, 2026).
-2. **[TODO]** Elena: Debug layout snaps on login/signup page transitions (Due: June 6, 2026).
-3. **[TODO]** Sarah: Review Apple Vision Pro depth effect shadows on floating sidebar.
 
-*Would you like me to push these automatically to the Kanban workspace?* (Type **"Yes push"** to create them)`;
-      } else if (cleaned.includes('yes push')) {
-        const t1 = {
-          title: 'Review Apple Vision Pro depth shadows',
-          description: 'Adjust overlay indexes and shadow blur offsets for the floating control dock.',
-          assignee: {
-            name: 'Sarah Connor',
-            avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80&fit=crop&q=80'
-          },
-          priority: 'high' as const,
-          deadline: 'June 9, 2026',
-          status: 'todo' as const
-        };
-        get().addTask(t1);
-        aiText = "Success! I have automatically added the task **'Review Apple Vision Pro depth shadows'** to the Kanban Workspace. You can see it on the Kanban board now.";
-      } else if (cleaned.startsWith('/email')) {
-        aiText = `### Draft Email: Follow-up & Outcomes
-**Subject**: Outcomes & Next Steps: IntellMeet Sync
-
-Hi Team,
-
-Following up on our session today, here is the executive summary and outstanding action items:
-
-**Overview**: We resolved layout specs and approved tailwind v4 tokens for the premium dark SaaS UI.
-
-**Action Items**:
-- Sarah: Review vision-pro style sidebar layout offsets.
-- Alex: Recharts implementation in Meeting DNA view.
-- Elena: Debug Framer Motion page snapping.
-
-Thanks,
-Julian Carter`;
-      } else if (cleaned.startsWith('/report')) {
-        aiText = `### Executive Productivity Report
-- **Meeting Duration**: 42 minutes
-- **Participation Index**: 89% (Highly Collaborative)
-- **Sentiment Score**: 92% Positive
-- **Burnout Indicator**: Low. Meeting fatigue index at 14% (down from 28% last week).
-- **Outcome Quality**: 9/10 (High clarity, 4 decisions recorded).`;
-      }
+    try {
+      const activeMeetingId = get().activeMeetingId;
+      const response = await api.copilot.chat(text, activeMeetingId);
       
       const aiMsg: Message = {
         id: `msg-${Date.now() + 1}`,
         sender: 'ai',
-        text: aiText,
+        text: response.reply || response.message || 'No response received.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       
@@ -602,7 +558,19 @@ Julian Carter`;
         aiMessages: [...state.aiMessages, aiMsg],
         isAiTyping: false
       }));
-    }, 1500);
+    } catch (err: any) {
+      const errorMsg: Message = {
+        id: `msg-${Date.now() + 1}`,
+        sender: 'ai',
+        text: `⚠️ Failed to get AI response: ${err.message || 'Unknown error'}. Please try again.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      
+      set((state) => ({
+        aiMessages: [...state.aiMessages, errorMsg],
+        isAiTyping: false
+      }));
+    }
   },
   
   clearCopilotMessages: () => set({

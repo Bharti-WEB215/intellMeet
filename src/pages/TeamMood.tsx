@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { api } from '../services/api.js';
 
-const defaultDepartmentData = [
+const fallbackDepartmentData = [
   { name: 'Dev', energy: 88, focus: 82, stress: 30 },
   { name: 'Design', energy: 90, focus: 85, stress: 45 },
   { name: 'Marketing', energy: 82, focus: 75, stress: 25 },
@@ -23,6 +23,9 @@ export const TeamMood: React.FC = () => {
   const { activeMeetingId } = useStore();
   const [dna, setDna] = useState<any | null>(null);
   const [timeline, setTimeline] = useState<any[]>([]);
+  const [departmentData, setDepartmentData] = useState<any[]>(fallbackDepartmentData);
+  const [burnoutWarnings, setBurnoutWarnings] = useState<any[]>([]);
+  const [aiDiagnostic, setAiDiagnostic] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,12 +43,83 @@ export const TeamMood: React.FC = () => {
       }
 
       try {
-        const [dnaResult, timelineResult] = await Promise.all([
-          api.analytics.getDNA(targetMtgId),
-          api.analytics.getSentiment(targetMtgId)
+        const [dnaResult, timelineResult, trendsResult] = await Promise.all([
+          api.analytics.getDNA(targetMtgId).catch(() => null),
+          api.analytics.getSentiment(targetMtgId).catch(() => null),
+          api.analytics.getTrends().catch(() => null)
         ]);
-        setDna(dnaResult);
-        setTimeline(timelineResult);
+
+        const fallbackDna = {
+          energyLevel: 80,
+          clarityScore: 85,
+          overallSentiment: 75,
+          engagement: 90
+        };
+
+        const fallbackTimeline = [
+          { time: '0m', score: 60, speakers: 1 },
+          { time: '10m', score: 75, speakers: 2 },
+          { time: '20m', score: 85, speakers: 3 }
+        ];
+
+        setDna(dnaResult || fallbackDna);
+        setTimeline(timelineResult || fallbackTimeline);
+
+        // Build department data from trends if available
+        if (trendsResult && Array.isArray(trendsResult) && trendsResult.length > 0) {
+          const depts = trendsResult.map((t: any) => ({
+            name: t.label || t.department || t.period || 'Team',
+            energy: t.energy ?? t.engagement ?? Math.round(100 - (t.stress ?? 30)),
+            focus: t.focus ?? t.focus_score ?? 80,
+            stress: t.stress ?? t.stress_percent ?? 30
+          }));
+          setDepartmentData(depts.slice(0, 6));
+        }
+
+        // Build burnout warnings from DNA data
+        const warnings: any[] = [];
+        if (dnaResult.stress_percent > 50) {
+          warnings.push({
+            title: 'Elevated team stress detected',
+            description: `Stress indicators at ${dnaResult.stress_percent}% — exceeds safe threshold`,
+            risk: 'HIGH RISK',
+            riskColor: 'text-red-400',
+            stressValue: `${dnaResult.stress_percent}% stress`
+          });
+        }
+        if (dnaResult.engagement_percent < 60) {
+          warnings.push({
+            title: 'Low engagement warning',
+            description: `Engagement dropped to ${dnaResult.engagement_percent}% — team may need a reset`,
+            risk: 'MODERATE',
+            riskColor: 'text-yellow-400',
+            stressValue: `${100 - dnaResult.engagement_percent}% disengaged`
+          });
+        }
+        if (warnings.length === 0) {
+          warnings.push({
+            title: 'Team energy levels stable',
+            description: 'Focus intervals and engagement are within healthy ranges',
+            risk: 'STABLE',
+            riskColor: 'text-emerald-400',
+            stressValue: `${dnaResult.stress_percent}% stress`
+          });
+        }
+        setBurnoutWarnings(warnings);
+
+        // Generate AI diagnostic from real data
+        const stressLevel = dnaResult.stress_percent ?? 0;
+        const focusScore = dnaResult.focus_score ?? 0;
+        const positivePercent = dnaResult.positive_percent ?? 0;
+        let diag = '';
+        if (stressLevel > 50) {
+          diag = `Linguistic evaluation indicates stress indicators at ${stressLevel}%. Recommend scheduling shorter meetings (25 min max) and implementing "Quiet Block" periods to reduce burnout fatigue. Focus score is at ${focusScore}%.`;
+        } else if (positivePercent > 70) {
+          diag = `Team morale is strong with ${positivePercent}% positive sentiment and only ${stressLevel}% stress. Current meeting cadence is effective. Consider maintaining this rhythm and celebrating recent team wins.`;
+        } else {
+          diag = `Mixed sentiment detected — ${positivePercent}% positive, ${stressLevel}% stress. Recommend a brief 15-minute wellness check-in and limiting consecutive video sessions to preserve focus (currently at ${focusScore}%).`;
+        }
+        setAiDiagnostic(diag);
       } catch (err) {
         console.error('Failed to load mood analytics:', err);
       } finally {
@@ -202,31 +276,22 @@ export const TeamMood: React.FC = () => {
               <h3 className="text-sm font-bold text-[var(--theme-text-secondary)] flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-red-500" /> Burnout Risk Warning Desk
               </h3>
-              <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full font-bold">1 ALARM</span>
+              <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full font-bold">{burnoutWarnings.filter(w => w.risk === 'HIGH RISK').length} ALARM{burnoutWarnings.filter(w => w.risk === 'HIGH RISK').length !== 1 ? 'S' : ''}</span>
             </div>
 
             <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-[var(--theme-divider)] pb-2.5">
-                <div>
-                  <h4 className="text-xs font-bold text-[var(--theme-text)]">Creative Department fatigue</h4>
-                  <p className="text-[10px] text-[var(--theme-text-muted)]">Exceeded 4 continuous video sync hours</p>
+              {burnoutWarnings.map((warning, idx) => (
+                <div key={idx} className={`flex items-center justify-between ${idx < burnoutWarnings.length - 1 ? 'border-b border-[var(--theme-divider)] pb-2.5' : ''}`}>
+                  <div>
+                    <h4 className="text-xs font-bold text-[var(--theme-text)]">{warning.title}</h4>
+                    <p className="text-[10px] text-[var(--theme-text-muted)]">{warning.description}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-xs ${warning.riskColor} font-bold font-mono`}>{warning.risk}</span>
+                    <span className="block text-[10px] text-[var(--theme-text-muted)] font-mono">{warning.stressValue}</span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-xs text-red-400 font-bold font-mono">HIGH RISK</span>
-                  <span className="block text-[10px] text-[var(--theme-text-muted)] font-mono">82% stress</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-[var(--theme-text)]">Engineering Dev sprint blocks</h4>
-                  <p className="text-[10px] text-[var(--theme-text-muted)]">Focus intervals are stable</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs text-emerald-400 font-bold font-mono">STABLE</span>
-                  <span className="block text-[10px] text-[var(--theme-text-muted)] font-mono">22% stress</span>
-                </div>
-              </div>
+              ))}
             </div>
           </GlassCard>
         </div>
@@ -239,7 +304,7 @@ export const TeamMood: React.FC = () => {
             
             <div className="flex-1 min-h-[160px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={defaultDepartmentData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                <BarChart data={departmentData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
                   <XAxis dataKey="name" stroke="var(--theme-chart-axis)" fontSize={9} tickLine={false} axisLine={false} />
                   <YAxis stroke="var(--theme-chart-axis)" fontSize={9} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ background: 'var(--theme-surface)', border: '1px solid var(--theme-border)', fontSize: '10px' }} />
@@ -259,7 +324,7 @@ export const TeamMood: React.FC = () => {
           <div className="space-y-1.5">
             <h4 className="text-xs font-bold text-[var(--theme-text)] font-mono tracking-wider">AI DIAGNOSTIC RECOMMENDATIONS</h4>
             <p className="text-xs text-[var(--theme-text-secondary)] leading-relaxed">
-              Linguistic evaluation indicates a 15% increase in stressful phrasing ("backlog", "deadlines", "delay") in the design channel. Recommend scheduling a <strong>"Quiet Block Thursday"</strong> and limiting consecutive meetings to 30 minutes to reduce burnout fatigue.
+              {aiDiagnostic || 'Analyzing meeting sentiment data to generate diagnostic recommendations...'}
             </p>
           </div>
         </GlassCard>

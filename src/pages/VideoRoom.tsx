@@ -27,6 +27,58 @@ export const VideoRoom: React.FC = () => {
     addNotification, setCurrentView, activeMeetingId, startMeeting, endActiveMeeting
   } = useStore();
 
+  // ---------- Real Screen Share Handler ----------
+  const handleToggleScreenShare = async () => {
+    if (isScreenSharing) {
+      // Stop screen sharing — restore camera track
+      try {
+        const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const cameraTrack = cameraStream.getVideoTracks()[0];
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = cameraStream;
+        }
+
+        // Replace the screen track with camera track in every peer connection
+        Object.values(peerConnections.current).forEach(pc => {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) sender.replaceTrack(cameraTrack);
+        });
+
+        setLocalStream(cameraStream);
+        socket.emit('screen-share-stopped', { meetingId: activeMeetingId });
+      } catch (err) {
+        console.error('Failed to restore camera after screen share:', err);
+      }
+      toggleScreenShare(); // flip store boolean → false + notification
+    } else {
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const screenTrack = screenStream.getVideoTracks()[0];
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = screenStream;
+        }
+
+        // Replace camera track with screen track in every peer connection
+        Object.values(peerConnections.current).forEach(pc => {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) sender.replaceTrack(screenTrack);
+        });
+
+        // When the user clicks the browser's native "Stop sharing" button
+        screenTrack.onended = () => {
+          handleToggleScreenShare(); // recursively restore camera
+        };
+
+        setLocalStream(screenStream);
+        toggleScreenShare(); // flip store boolean → true + notification
+      } catch (err) {
+        console.error('Screen share failed:', err);
+      }
+    }
+  };
+
   const [meetingTimer, setMeetingTimer] = useState(0);
   const [meetingTitle, setMeetingTitle] = useState('Workspace General Sync');
   const [liveTranscript, setLiveTranscript] = useState<Array<{ speaker_name: string; text: string }>>([]);
@@ -257,6 +309,21 @@ export const VideoRoom: React.FC = () => {
     };
   }, [activeMeetingId]);
 
+  // ---------- In-Meeting Chat over Socket.IO ----------
+  useEffect(() => {
+    if (!activeMeetingId) return;
+
+    const handleIncomingChat = (msg: { sender: string; text: string; time: string }) => {
+      setChatMessages(prev => [...prev, msg]);
+    };
+
+    socket.on('chat-message', handleIncomingChat);
+
+    return () => {
+      socket.off('chat-message', handleIncomingChat);
+    };
+  }, [activeMeetingId]);
+
   // Capture Audio slices and push to Whisper API when recording
   useEffect(() => {
     if (!isRecording || !localStream || !activeMeetingId) {
@@ -346,13 +413,40 @@ export const VideoRoom: React.FC = () => {
     if (!chatInput.trim()) return;
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const sender = localStorage.getItem('intellmeet_token')?.replace('dev-token-', '').split('@')[0] || 'Julian';
-    
-    setChatMessages(prev => [...prev, { 
-      sender: sender.charAt(0).toUpperCase() + sender.slice(1), 
-      text: chatInput, 
-      time 
-    }]);
+    const formattedSender = sender.charAt(0).toUpperCase() + sender.slice(1);
+
+    const messagePayload = { sender: formattedSender, text: chatInput, time };
+
+    // Add locally immediately for instant feedback
+    setChatMessages(prev => [...prev, messagePayload]);
+
+    // Broadcast to other peers via Socket.IO
+    socket.emit('chat-message', {
+      meetingId: activeMeetingId,
+      sender: formattedSender,
+      text: chatInput,
+      time,
+    });
+
     setChatInput('');
+  };
+
+  // ---------- Leave Meeting Handler ----------
+  const handleLeaveMeeting = async () => {
+    if (!window.confirm('Do you want to end and save meeting DNA analytics?')) return;
+
+    // Stop all local media tracks
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      setLocalStream(null);
+    }
+
+    // Notify other peers
+    socket.emit('peer-left', activeMeetingId);
+
+    addNotification('Wrapping up session analysis...', 'success');
+    await endActiveMeeting();
+    setCurrentView('post-meeting');
   };
 
   const formatTime = (secs: number) => {
@@ -561,7 +655,7 @@ export const VideoRoom: React.FC = () => {
 
             {/* Screen Share */}
             <button 
-              onClick={toggleScreenShare}
+              onClick={handleToggleScreenShare}
               className={`p-3 rounded-xl border transition-all duration-200 cursor-pointer ${
                 isScreenSharing 
                   ? 'bg-secondary/20 border-secondary/40 text-secondary hover:bg-secondary/30' 
@@ -585,13 +679,7 @@ export const VideoRoom: React.FC = () => {
 
             {/* Red End Meeting Button */}
             <button 
-              onClick={async () => {
-                if (window.confirm('Do you want to end and save meeting DNA analytics?')) {
-                  addNotification('Wrapping up session analysis...', 'success');
-                  await endActiveMeeting();
-                  setCurrentView('post-meeting');
-                }
-              }}
+              onClick={handleLeaveMeeting}
               className="btn-magnetic p-3 rounded-xl bg-red-600 hover:bg-red-700 text-white border border-red-600/35 transition-all duration-200 cursor-pointer"
               style={{ boxShadow: '0 4px 20px -4px rgba(239, 68, 68, 0.3)' }}
               title="End Meeting & Generate DNA"

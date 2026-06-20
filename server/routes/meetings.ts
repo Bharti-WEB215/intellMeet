@@ -1,82 +1,114 @@
-// routes/meetings.ts
-import express from 'express';
+// routes/meetings.ts — Meeting routes (MongoDB/Mongoose)
+import { Router, Response } from 'express';
 import multer from 'multer';
-import { verifyAuth, AuthenticatedRequest } from '../middleware/auth.js';
-import { query } from '../db/db.js';
-import { analyzeSentiment, extractTasks, generateSummary, transcribeAudio } from '../services/openai.js';
+import { AuthRequest, verifyToken } from '../middleware/jwt-auth.js';
+import {
+  Meeting,
+  Transcript,
+  SentimentScore,
+  MeetingAnalytics,
+  MeetingInsight,
+  MeetingMessage,
+  Task,
+  ActivityLog,
+} from '../models/index.js';
+import { transcribeAudio, analyzeSentiment, extractTasks, generateSummary } from '../services/openai.js';
 
 const upload = multer();
-const router = express.Router();
+const router = Router();
 
-// Get all meetings
-router.get('/', verifyAuth, async (req, res) => {
+// ─── GET / — List all meetings for user ───
+router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const result = await query('SELECT * FROM meetings ORDER BY created_at DESC');
-    res.json(result.rows);
+    const meetings = await Meeting.find()
+      .populate('creatorId', 'name email avatar')
+      .sort({ createdAt: -1 });
+
+    res.json(meetings);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch meetings', details: err.message });
   }
 });
 
-// Create meeting room
-router.post('/', verifyAuth, async (req: AuthenticatedRequest, res) => {
+// ─── POST / — Create meeting ───
+router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   const { title } = req.body;
   if (!title) return res.status(400).json({ error: 'Meeting title is required' });
 
-  const id = `mtg-${Math.random().toString(36).substr(2, 9)}`;
-
   try {
-    const result = await query(
-      'INSERT INTO meetings(id, title, status) VALUES($1, $2, $3) RETURNING *',
-      [id, title, 'active']
-    );
-    res.status(201).json(result.rows[0]);
+    const meeting = await Meeting.create({
+      title,
+      creatorId: req.userId,
+      status: 'active',
+      startTime: new Date(),
+      participants: [{ userId: req.userId, role: 'host', joinedAt: new Date() }],
+    });
+
+    // Populate creator info before returning
+    const populated = await Meeting.findById(meeting._id)
+      .populate('creatorId', 'name email avatar');
+
+    res.status(201).json(populated);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to create meeting', details: err.message });
   }
 });
 
-// Get meeting by ID
-router.get('/:id', verifyAuth, async (req, res) => {
+// ─── GET /:id — Get meeting by ID ───
+router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const result = await query('SELECT * FROM meetings WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Meeting not found' });
-    res.json(result.rows[0]);
+    const meeting = await Meeting.findById(req.params.id)
+      .populate('creatorId', 'name email avatar')
+      .populate('participants.userId', 'name email avatar');
+
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+
+    res.json(meeting);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve meeting details', details: err.message });
   }
 });
 
-// Submit transcript segment
-router.post('/:id/transcript', verifyAuth, async (req: AuthenticatedRequest, res) => {
+// ─── POST /:id/transcript — Submit transcript segment ───
+router.post('/:id/transcript', verifyToken, async (req: AuthRequest, res: Response) => {
   const { speaker_name, text } = req.body;
-  if (!speaker_name || !text) return res.status(400).json({ error: 'Speaker and transcript text required' });
-
-  const tId = `tr-${Math.random().toString(36).substr(2, 9)}`;
+  if (!speaker_name || !text) {
+    return res.status(400).json({ error: 'Speaker and transcript text required' });
+  }
 
   try {
-    const result = await query(
-      'INSERT INTO transcripts(id, meeting_id, speaker_name, text) VALUES($1, $2, $3, $4) RETURNING *',
-      [tId, req.params.id, speaker_name, text]
-    );
+    const transcript = await Transcript.create({
+      meetingId: req.params.id,
+      speakerName: speaker_name,
+      speakerId: req.userId,
+      text,
+    });
 
     // Run async sentiment calculation in background
     analyzeSentiment(text).then(async (sentiment) => {
-      // Log sentiment scores
-      await query(
-        'INSERT INTO sentiment_scores(meeting_id, positive, neutral, negative, stress, engagement, collaboration) VALUES($1, $2, $3, $4, $5, $6, $7)',
-        [req.params.id, sentiment.positive, sentiment.neutral, sentiment.negative, sentiment.stress, sentiment.engagement, sentiment.collaboration]
-      );
+      await SentimentScore.create({
+        meetingId: req.params.id,
+        positive: sentiment.positive,
+        neutral: sentiment.neutral,
+        negative: sentiment.negative,
+        label: sentiment.positive > sentiment.negative ? 'positive' : 'negative',
+      });
     }).catch(console.error);
 
-    res.status(201).json(result.rows[0]);
+    // Broadcast via Socket.IO if available
+    const io = req.app.get('io');
+    if (io) {
+      io.to(req.params.id).emit('transcript:new', transcript);
+    }
+
+    res.status(201).json(transcript);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to save transcript block', details: err.message });
   }
 });
 
-// Submit audio blob transcription
-router.post('/:id/transcript-blob', verifyAuth, upload.single('audio'), async (req: AuthenticatedRequest, res) => {
+// ─── POST /:id/transcript-blob — Submit audio blob for transcription ───
+router.post('/:id/transcript-blob', verifyToken, upload.single('audio'), async (req: AuthRequest, res: Response) => {
   const meetingId = req.params.id;
   const { speaker_name } = req.body;
 
@@ -86,137 +118,157 @@ router.post('/:id/transcript-blob', verifyAuth, upload.single('audio'), async (r
 
   try {
     const text = await transcribeAudio(req.file.buffer, 'wav');
-    const tId = `tr-${Math.random().toString(36).substr(2, 9)}`;
 
-    const result = await query(
-      'INSERT INTO transcripts(id, meeting_id, speaker_name, text) VALUES($1, $2, $3, $4) RETURNING *',
-      [tId, meetingId, speaker_name || 'Speaker', text]
-    );
+    const transcript = await Transcript.create({
+      meetingId,
+      speakerName: speaker_name || 'Speaker',
+      speakerId: req.userId,
+      text,
+    });
 
     // Calculate sentiment asynchronously
     analyzeSentiment(text).then(async (sentiment) => {
-      await query(
-        'INSERT INTO sentiment_scores(meeting_id, positive, neutral, negative, stress, engagement, collaboration) VALUES($1, $2, $3, $4, $5, $6, $7)',
-        [meetingId, sentiment.positive, sentiment.neutral, sentiment.negative, sentiment.stress, sentiment.engagement, sentiment.collaboration]
-      );
+      await SentimentScore.create({
+        meetingId,
+        positive: sentiment.positive,
+        neutral: sentiment.neutral,
+        negative: sentiment.negative,
+        label: sentiment.positive > sentiment.negative ? 'positive' : 'negative',
+      });
     }).catch(console.error);
 
-    res.json({ text, transcript: result.rows[0] });
+    // Broadcast via Socket.IO if available
+    const io = req.app.get('io');
+    if (io) {
+      io.to(meetingId).emit('transcript:new', transcript);
+    }
+
+    res.json({ text, transcript });
   } catch (err: any) {
     console.error('Failed to transcribe audio blob:', err);
     res.status(500).json({ error: 'Failed to transcribe audio segment', details: err.message });
   }
 });
 
-// Get transcript segments for meeting
-router.get('/:id/transcript', verifyAuth, async (req, res) => {
+// ─── GET /:id/transcript — Get transcript segments for meeting ───
+router.get('/:id/transcript', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const result = await query(
-      'SELECT * FROM transcripts WHERE meeting_id = $1 ORDER BY timestamp ASC',
-      [req.params.id]
-    );
-    res.json(result.rows);
+    const transcripts = await Transcript.find({ meetingId: req.params.id })
+      .sort({ timestamp: 1 });
+
+    res.json(transcripts);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve transcripts', details: err.message });
   }
 });
 
-// End meeting and trigger summary + tasks extraction
-router.post('/:id/end', verifyAuth, async (req: AuthenticatedRequest, res) => {
+// ─── POST /:id/end — End meeting and trigger AI summary + task extraction ───
+router.post('/:id/end', verifyToken, async (req: AuthRequest, res: Response) => {
   const meetingId = req.params.id;
 
   try {
-    // 1. Mark meeting as completed
-    const mtgResult = await query(
-      'UPDATE meetings SET status = $1, duration = $2 WHERE id = $3 RETURNING *',
-      ['completed', 45 * 60, meetingId] // Mock duration 45 mins
-    );
+    // 1. Mark meeting as completed and set endTime
+    const endTime = new Date();
+    const meeting = await Meeting.findById(meetingId);
 
-    if (mtgResult.rows.length === 0) return res.status(404).json({ error: 'Meeting not found' });
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+
+    // Calculate actual duration in seconds
+    const startTime = meeting.startTime || meeting.createdAt;
+    const durationSec = Math.floor((endTime.getTime() - new Date(startTime).getTime()) / 1000);
+
+    const updatedMeeting = await Meeting.findByIdAndUpdate(
+      meetingId,
+      { status: 'completed', endTime, duration: durationSec },
+      { new: true }
+    );
 
     // 2. Fetch full transcript text
-    const transcriptsResult = await query(
-      'SELECT speaker_name, text FROM transcripts WHERE meeting_id = $1 ORDER BY timestamp ASC',
-      [meetingId]
-    );
+    const transcripts = await Transcript.find({ meetingId }).sort({ timestamp: 1 });
 
-    const fullTranscript = transcriptsResult.rows
-      .map(t => `${t.speaker_name}: ${t.text}`)
+    const fullTranscript = transcripts
+      .map(t => `${t.speakerName}: ${t.text}`)
       .join('\n') || 'General Sync Discussion.';
 
-    // 3. Trigger AI operations
-    const sentimentPromise = analyzeSentiment(fullTranscript);
-    const tasksPromise = extractTasks(fullTranscript, meetingId);
-    const summaryPromise = generateSummary(fullTranscript);
-
+    // 3. Trigger AI operations in parallel
     const [sentiment, tasks, summary] = await Promise.all([
-      sentimentPromise,
-      tasksPromise,
-      summaryPromise
+      analyzeSentiment(fullTranscript),
+      extractTasks(fullTranscript, meetingId),
+      generateSummary(fullTranscript),
     ]);
 
-    // 4. Save Analytics to database
-    // Generate some DNA scores (Decision Quality, Focus, Energy) based on text/sentiment length
+    // 4. Calculate DNA scores from sentiment
     const dec = Math.min(100, Math.max(30, 40 + sentiment.positive - sentiment.stress / 2));
     const foc = Math.min(100, Math.max(35, 85 - sentiment.neutral / 2));
     const ene = Math.min(100, Math.max(40, sentiment.positive + sentiment.neutral / 3));
-    const bal = Math.min(100, Math.max(30, 60 + (transcriptsResult.rows.length > 5 ? 20 : 0)));
+    const bal = Math.min(100, Math.max(30, 60 + (transcripts.length > 5 ? 20 : 0)));
     const act = Math.min(100, Math.max(30, 30 + tasks.length * 15));
 
-    await query(
-      `INSERT INTO meeting_analytics(
-        meeting_id, positive_percent, neutral_percent, negative_percent, 
-        stress_percent, engagement_percent, collaboration_percent,
-        decision_quality, focus_score, energy_score, participation_balance, actionability
-      ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-      [
-        meetingId, sentiment.positive, sentiment.neutral, sentiment.negative,
-        sentiment.stress, sentiment.engagement, sentiment.collaboration,
-        dec, foc, ene, bal, act
-      ]
-    );
+    // 5. Save MeetingAnalytics
+    await MeetingAnalytics.create({
+      meetingId,
+      positivePercent: sentiment.positive,
+      neutralPercent: sentiment.neutral,
+      negativePercent: sentiment.negative,
+      stressPercent: sentiment.stress,
+      engagementPercent: sentiment.engagement,
+      collaborationPercent: sentiment.collaboration,
+      decisionQuality: dec,
+      focusScore: foc,
+      energyScore: ene,
+      participationBalance: bal,
+      actionability: act,
+    });
 
-    // Save Summary to meeting insights
-    const insightId = `ins-${Math.random().toString(36).substr(2, 9)}`;
+    // 6. Save MeetingInsight with summary
     const summaryText = JSON.stringify(summary);
-    await query(
-      'INSERT INTO meeting_insights(id, meeting_id, text) VALUES($1, $2, $3)',
-      [insightId, meetingId, summaryText]
-    );
+    await MeetingInsight.create({
+      meetingId,
+      type: 'highlight',
+      content: summaryText,
+      confidence: 0.9,
+    });
 
-    // Save Tasks to database
+    // 7. Save Tasks extracted by AI
     for (const t of tasks) {
-      await query(
-        `INSERT INTO tasks(id, meeting_id, title, description, assignee_name, assignee_avatar, priority, deadline, status)
-         VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [t.id, meetingId, t.title, t.description, t.assignee_name, t.assignee_avatar, t.priority, t.deadline, 'todo']
-      );
-      
-      // Seed activity logs
-      const actId = `act-${Math.random().toString(36).substr(2, 9)}`;
-      await query(
-        'INSERT INTO activity_logs(id, user_name, avatar, action, time) VALUES($1, $2, $3, $4, $5)',
-        [actId, 'AI Copilot', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120', `auto-extracted task: "${t.title}" from meeting`, 'Just now']
-      );
+      await Task.create({
+        title: t.title,
+        description: t.description,
+        assigneeName: t.assignee_name,
+        assigneeAvatar: t.assignee_avatar,
+        priority: t.priority,
+        deadline: t.deadline,
+        status: 'todo',
+        meetingId,
+        creatorId: req.userId,
+      });
+
+      // Log activity
+      await ActivityLog.create({
+        userId: req.userId,
+        userName: 'AI Copilot',
+        userAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120',
+        action: `auto-extracted task: "${t.title}" from meeting`,
+      });
     }
 
     res.json({
-      meeting: mtgResult.rows[0],
+      meeting: updatedMeeting,
       analytics: {
-        positive_percent: sentiment.positive,
-        neutral_percent: sentiment.neutral,
-        negative_percent: sentiment.negative,
-        stress_percent: sentiment.stress,
-        engagement_percent: sentiment.engagement,
-        collaboration_percent: sentiment.collaboration,
-        decision_quality: dec,
-        focus_score: foc,
-        energy_score: ene,
-        participation_balance: bal,
-        actionability: act
+        positivePercent: sentiment.positive,
+        neutralPercent: sentiment.neutral,
+        negativePercent: sentiment.negative,
+        stressPercent: sentiment.stress,
+        engagementPercent: sentiment.engagement,
+        collaborationPercent: sentiment.collaboration,
+        decisionQuality: dec,
+        focusScore: foc,
+        energyScore: ene,
+        participationBalance: bal,
+        actionability: act,
       },
       summary,
-      tasksCreated: tasks.length
+      tasksCreated: tasks.length,
     });
   } catch (err: any) {
     console.error('Error ending meeting:', err);
@@ -224,29 +276,58 @@ router.post('/:id/end', verifyAuth, async (req: AuthenticatedRequest, res) => {
   }
 });
 
-// Get meeting summary & insights
-router.get('/:id/summary', verifyAuth, async (req, res) => {
+// ─── GET /:id/summary — Get meeting summary & insights ───
+router.get('/:id/summary', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const insightsResult = await query(
-      'SELECT text FROM meeting_insights WHERE meeting_id = $1 LIMIT 1',
-      [req.params.id]
-    );
-    const analyticsResult = await query(
-      'SELECT * FROM meeting_analytics WHERE meeting_id = $1 LIMIT 1',
-      [req.params.id]
-    );
+    const insight = await MeetingInsight.findOne({ meetingId: req.params.id });
+    const analytics = await MeetingAnalytics.findOne({ meetingId: req.params.id });
+    const tasks = await Task.find({ meetingId: req.params.id });
 
-    if (insightsResult.rows.length === 0) {
+    if (!insight) {
       return res.status(404).json({ error: 'Summary report not ready or not found' });
     }
 
-    const summaryData = JSON.parse(insightsResult.rows[0].text);
+    let summaryData;
+    try {
+      summaryData = JSON.parse(insight.content);
+    } catch {
+      summaryData = insight.content;
+    }
+
     res.json({
       summary: summaryData,
-      analytics: analyticsResult.rows[0] || null
+      analytics: analytics || null,
+      tasks,
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve meeting summary', details: err.message });
+  }
+});
+
+// ─── GET /:id/messages — Fetch in-meeting chat messages ───
+router.get('/:id/messages', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const messages = await MeetingMessage.find({ meetingId: req.params.id })
+      .populate('userId', 'name email avatar')
+      .sort({ createdAt: 1 });
+
+    res.json(messages);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch meeting messages', details: err.message });
+  }
+});
+
+// ─── GET /:id/participants — Return meeting participants with user info ───
+router.get('/:id/participants', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const meeting = await Meeting.findById(req.params.id)
+      .populate('participants.userId', 'name email avatar isOnline');
+
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+
+    res.json(meeting.participants);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch participants', details: err.message });
   }
 });
 

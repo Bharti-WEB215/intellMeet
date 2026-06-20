@@ -6,7 +6,7 @@ import { Sparkles, ArrowLeft, Mail, Lock, User, AlertCircle, Shield, Zap } from 
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const AuthPages: React.FC = () => {
-  const { authMode, setAuthMode, login, setCurrentView, theme, toggleTheme } = useStore();
+  const { authMode, setAuthMode, login, register, setCurrentView, theme, toggleTheme, addNotification } = useStore();
   
   // Inputs
   const [email, setEmail] = useState('');
@@ -16,7 +16,7 @@ export const AuthPages: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {
       setErrorMsg('Please enter both email and password.');
@@ -24,13 +24,16 @@ export const AuthPages: React.FC = () => {
     }
     setErrorMsg('');
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      await login(email, password);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Login failed. Please check your credentials.');
+    } finally {
       setIsLoading(false);
-      login(email);
-    }, 1200);
+    }
   };
 
-  const handleSignupSubmit = (e: React.FormEvent) => {
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !password.trim()) {
       setErrorMsg('All fields are required.');
@@ -38,10 +41,13 @@ export const AuthPages: React.FC = () => {
     }
     setErrorMsg('');
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      await register(name, email, password);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Registration failed. Please try again.');
+    } finally {
       setIsLoading(false);
-      setAuthMode('otp');
-    }, 1000);
+    }
   };
 
   const handleForgotSubmit = (e: React.FormEvent) => {
@@ -70,7 +76,8 @@ export const AuthPages: React.FC = () => {
     setIsLoading(true);
     setTimeout(() => {
       setIsLoading(false);
-      login(email || 'new.user@intellmeet.io');
+      addNotification('OTP verified successfully! Please login with your credentials.', 'success');
+      setAuthMode('login');
     }, 1200);
   };
 
@@ -300,7 +307,7 @@ export const AuthPages: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <motion.button 
-                    onClick={() => login('google.user@company.com')}
+                    onClick={() => addNotification('Google OAuth coming soon', 'info')}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className="flex items-center justify-center gap-2 border border-[var(--theme-border)] rounded-xl py-3 text-xs font-semibold hover:bg-[var(--theme-surface-hover)] transition-all cursor-pointer bg-[var(--theme-surface-alt)] hover:border-[var(--theme-border-hover)]"
@@ -310,7 +317,7 @@ export const AuthPages: React.FC = () => {
                     </svg> Google
                   </motion.button>
                   <motion.button 
-                    onClick={() => login('github.user@company.com')}
+                    onClick={() => addNotification('GitHub OAuth coming soon', 'info')}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className="flex items-center justify-center gap-2 border border-[var(--theme-border)] rounded-xl py-3 text-xs font-semibold hover:bg-[var(--theme-surface-hover)] transition-all cursor-pointer bg-[var(--theme-surface-alt)] hover:border-[var(--theme-border-hover)]"

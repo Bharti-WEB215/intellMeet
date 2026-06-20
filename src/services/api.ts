@@ -2,12 +2,12 @@
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
-// Retrieve auth token. Default to a developer token if none is stored.
+// Retrieve JWT auth token from localStorage
 const getAuthToken = () => {
-  return localStorage.getItem('intellmeet_token') || 'dev-token-j.carter@stripe.com';
+  return localStorage.getItem('intellmeet_jwt');
 };
 
-// Generic fetch API helper
+// Generic fetch API helper with 401 interceptor
 const request = async (path: string, options: RequestInit = {}) => {
   const headers = new Headers(options.headers || {});
   const token = getAuthToken();
@@ -23,6 +23,13 @@ const request = async (path: string, options: RequestInit = {}) => {
     headers,
   });
 
+  // 401 interceptor: clear token (skip login/register — they return 401 for bad credentials)
+  const isAuthEndpoint = path === '/auth/login' || path === '/auth/register';
+  if (response.status === 401 && !isAuthEndpoint) {
+    localStorage.removeItem('intellmeet_jwt');
+    throw new Error('Session expired. Please log in again.');
+  }
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
@@ -34,11 +41,34 @@ const request = async (path: string, options: RequestInit = {}) => {
 export const api = {
   // Auth API
   auth: {
+    register: (name: string, email: string, password: string) =>
+      request('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ name, email, password }),
+      }),
+    login: (email: string, password: string) =>
+      request('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      }),
+    logout: () =>
+      request('/auth/logout', {
+        method: 'POST',
+      }),
     getProfile: () => request('/auth/me'),
-    updateProfile: (profile: { name?: string; role?: string; company?: string; avatar?: string }) =>
+    updateProfile: (data: { name?: string; role?: string; company?: string; avatar?: string }) =>
       request('/auth/update-profile', {
         method: 'POST',
-        body: JSON.stringify(profile),
+        body: JSON.stringify(data),
+      }),
+  },
+
+  // Copilot API
+  copilot: {
+    chat: (message: string, meetingId?: string | null, context?: string) =>
+      request('/copilot/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message, meeting_id: meetingId, context }),
       }),
   },
 
@@ -62,6 +92,8 @@ export const api = {
         method: 'POST',
       }),
     getSummary: (meetingId: string) => request(`/meetings/${meetingId}/summary`),
+    getMessages: (meetingId: string) => request(`/meetings/${meetingId}/messages`),
+    getParticipants: (meetingId: string) => request(`/meetings/${meetingId}/participants`),
   },
 
   // Tasks API
@@ -133,5 +165,7 @@ export const api = {
     getDashboard: () => request('/analytics/dashboard'),
     getDNA: (meetingId: string) => request(`/analytics/meetings/${meetingId}/dna`),
     getSentiment: (meetingId: string) => request(`/analytics/meetings/${meetingId}/sentiment`),
+    getTrends: () => request('/analytics/trends'),
+    getAttendance: () => request('/analytics/attendance'),
   },
 };

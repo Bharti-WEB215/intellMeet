@@ -21,7 +21,7 @@ interface DashboardMetrics {
   avgMeetingDuration: number;
 }
 
-const defaultFocusData = [
+const fallbackFocusData = [
   { time: '0m', focus: 65 },
   { time: '10m', focus: 78 },
   { time: '20m', focus: 85 },
@@ -49,22 +49,66 @@ export const Dashboard: React.FC = () => {
   const [activities, setActivities] = useState<any[]>([]);
   const [activeMeeting, setActiveMeeting] = useState<any | null>(null);
   const [focusLevel, setFocusLevel] = useState(88);
+  const [focusData, setFocusData] = useState<any[]>(fallbackFocusData);
+  const [aiRecommendation, setAiRecommendation] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
-        const [mDetails, actList, mtgList] = await Promise.all([
-          api.analytics.getDashboard(),
-          api.workspace.getActivities(),
-          api.meetings.list()
+        const [mDetails, actList, mtgList, trendsResult] = await Promise.all([
+          api.analytics.getDashboard().catch(() => null),
+          api.workspace.getActivities().catch(() => []),
+          api.meetings.list().catch(() => []),
+          api.analytics.getTrends().catch(() => null)
         ]);
         
-        setMetrics(mDetails);
-        setActivities(actList.slice(-3).reverse()); // show latest 3 activities
+        const fallbackMDetails = {
+          totalMeetings: 0,
+          activeMeetings: 0,
+          totalTasks: 0,
+          completedTasks: 0,
+          activeUsers: 1,
+          taskCompletionRate: 0,
+          aiInsightsGenerated: 0,
+          avgMeetingDuration: 0,
+          recentMeetings: [],
+          averageSentiment: 85
+        };
+
+        const finalMetrics = mDetails || fallbackMDetails;
+        setMetrics(finalMetrics);
+        setActivities((actList || []).slice(-3).reverse());
         
-        const activeM = mtgList.find((m: any) => m.status === 'active');
-        setActiveMeeting(activeM || (mtgList.length ? mtgList[0] : null));
+        const safeMtgList = mtgList || [];
+        const activeM = safeMtgList.find((m: any) => m.status === 'active');
+        setActiveMeeting(activeM || (safeMtgList.length ? safeMtgList[0] : null));
+
+        // Build focus chart data from trends if available
+        if (trendsResult && Array.isArray(trendsResult) && trendsResult.length > 0) {
+          const mapped = trendsResult.slice(-6).map((t: any, i: number) => ({
+            time: t.label || t.period || `${i * 10}m`,
+            focus: t.focus ?? t.engagement ?? t.score ?? 80
+          }));
+          setFocusData(mapped);
+        }
+
+        // Generate AI recommendation from real metrics
+        const completionRate = finalMetrics.taskCompletionRate ?? 0;
+        const sentiment = finalMetrics.averageSentiment ?? 0;
+        const avgDuration = finalMetrics.avgMeetingDuration ?? 0;
+        let rec = '';
+        if (completionRate < 50) {
+          rec = `Task completion rate is at ${completionRate}%. Consider breaking down large tasks into smaller, actionable items and scheduling focused sprint sessions to boost delivery velocity.`;
+        } else if (sentiment < 60) {
+          rec = `Team sentiment is at ${sentiment}%. We suggest scheduling a brief wellness check-in and limiting consecutive meetings to ${Math.min(avgDuration, 30)} minutes to improve morale.`;
+        } else if (avgDuration > 45) {
+          rec = `Average session duration is ${avgDuration}m which exceeds the recommended 45-minute limit. Consider implementing focus blocks and shorter stand-up formats to maintain engagement.`;
+        } else {
+          rec = `Team is performing well with ${completionRate}% task completion and ${sentiment}% positive sentiment. Maintain current cadence and consider celebrating recent wins to sustain momentum.`;
+        }
+        setAiRecommendation(rec);
+
         fetchTasks();
       } catch (err) {
         console.error('Failed to load dashboard metrics:', err);
@@ -266,7 +310,7 @@ export const Dashboard: React.FC = () => {
             </div>
             <div className="flex-1 min-h-[50px] mt-2">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={defaultFocusData} margin={{ top: 2, right: 0, left: -28, bottom: 0 }}>
+                <AreaChart data={focusData} margin={{ top: 2, right: 0, left: -28, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorFocus" x1="0%" y1="0%" x2="0%" y2="100%">
                       <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.25} />
@@ -312,7 +356,7 @@ export const Dashboard: React.FC = () => {
             <div className="space-y-1">
               <h4 className="font-heading text-xs font-bold text-[var(--theme-text)] tracking-wider uppercase">AI Insight Action Recommendation</h4>
               <p className="text-xs text-[var(--theme-text-secondary)] leading-relaxed">
-                Design backlog is growing and team fatigue is up 12% in Marketing comparison. We suggest scheduling a 25-minute check-in or utilizing focus blocks.
+                {aiRecommendation || 'Analyzing workspace data to generate personalized recommendations...'}
               </p>
             </div>
           </GlassCard>
