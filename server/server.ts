@@ -31,17 +31,42 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`Origin not allowed by Socket.IO CORS: ${origin}`));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
 });
 
 const PORT = process.env.PORT || 5000;
+const parseAllowedOrigins = (raw?: string) => {
+  if (!raw) return ['http://localhost:5173', 'http://127.0.0.1:5173'];
+  return raw.split(',').map((origin) => origin.trim()).filter(Boolean);
+};
+
+const allowedOrigins = parseAllowedOrigins(process.env.CORS_ORIGIN || process.env.CORS_ORIGINS);
+const isAllowedOrigin = (origin?: string | null) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+
+  const hostname = new URL(origin).hostname;
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+};
 
 // ─── Middleware ───
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    if (isAllowedOrigin(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error(`Origin not allowed by CORS: ${origin}`));
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -131,6 +156,11 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ── Emojis / Reactions ──
+  socket.on('reaction', ({ roomId, emoji, userId }: { roomId: string, emoji: string, userId: string }) => {
+    socket.to(roomId).emit('reaction', { emoji, userId });
+  });
+
   // ── Kanban card sync ──
   socket.on('kanban-card-moved', ({ taskId, newStatus }: {
     taskId: string; newStatus: string;
@@ -211,7 +241,7 @@ const startServer = async () => {
   await connectDB();
   await connectRedis();
 
-  server.listen(PORT, () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 IntellMeet Backend running on http://localhost:${PORT}`);
     console.log(`📊 Metrics available at http://localhost:${PORT}/metrics`);
     console.log(`❤️  Health check at http://localhost:${PORT}/health`);

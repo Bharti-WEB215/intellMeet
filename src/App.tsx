@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import type { ViewType } from './store/useStore';
 import { 
@@ -24,7 +25,35 @@ import TeamWorkspace from './pages/TeamWorkspace';
 import CommandMenu from './components/CommandMenu';
 import AICopilot from './components/AICopilot';
 
-export const App: React.FC = () => {
+// Map from viewType to route path
+const viewToPath: Record<ViewType, string> = {
+  'landing': '/',
+  'auth': '/auth',
+  'dashboard': '/dashboard',
+  'meeting-room': '/room',
+  'team-mood': '/team-mood',
+  'meeting-dna': '/meeting-dna',
+  'kanban': '/kanban',
+  'analytics': '/analytics',
+  'post-meeting': '/post-meeting',
+  'team-workspace': '/workspace',
+};
+
+const pathToView: Record<string, ViewType> = {
+  '/': 'landing',
+  '/auth': 'auth',
+  '/dashboard': 'dashboard',
+  '/room': 'meeting-room',
+  '/team-mood': 'team-mood',
+  '/meeting-dna': 'meeting-dna',
+  '/kanban': 'kanban',
+  '/analytics': 'analytics',
+  '/post-meeting': 'post-meeting',
+  '/workspace': 'team-workspace',
+};
+
+// Shell layout wrapping authenticated pages
+const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { 
     currentView, 
     setCurrentView, 
@@ -34,41 +63,13 @@ export const App: React.FC = () => {
     notifications, 
     removeNotification,
     isRecording,
-    initializeStore,
     theme,
     toggleTheme
   } = useStore();
 
+  const navigate = useNavigate();
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  React.useEffect(() => {
-    const token = localStorage.getItem('intellmeet_jwt');
-    if (token) {
-      setCurrentView('dashboard');
-      initializeStore();
-    }
-  }, [initializeStore, setCurrentView]);
-
-  // If viewing marketing landing page, skip shell
-  if (currentView === 'landing') {
-    return (
-      <div className="w-full">
-        <LandingPage />
-        <CommandMenu />
-      </div>
-    );
-  }
-
-  // If viewing authentication portal, skip shell
-  if (currentView === 'auth') {
-    return (
-      <div className="w-full">
-        <AuthPages />
-        <CommandMenu />
-      </div>
-    );
-  }
 
   const navItems: Array<{
     view: ViewType;
@@ -122,7 +123,13 @@ export const App: React.FC = () => {
 
   const handleNavClick = (view: ViewType) => {
     setCurrentView(view);
+    navigate(viewToPath[view] || '/dashboard');
     setMobileMenuOpen(false);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
   };
 
   return (
@@ -224,7 +231,7 @@ export const App: React.FC = () => {
             </div>
             
             <motion.button 
-              onClick={logout} 
+              onClick={handleLogout} 
               title="Sign Out"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
@@ -303,7 +310,7 @@ export const App: React.FC = () => {
                   <p className="text-[9px] text-[var(--theme-text-muted)]">{user?.role}</p>
                 </div>
               </div>
-              <button onClick={logout} className="text-xs text-red-400 font-bold hover:underline flex items-center gap-1">
+              <button onClick={handleLogout} className="text-xs text-red-400 font-bold hover:underline flex items-center gap-1">
                 <LogOut className="w-3.5 h-3.5" /> Sign Out
               </button>
             </div>
@@ -334,25 +341,9 @@ export const App: React.FC = () => {
         </header>
 
         {/* Dynamic Page Content */}
-        <AnimatePresence mode="wait">
-          <motion.div 
-            key={currentView}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="flex-1"
-          >
-            {currentView === 'dashboard' && <Dashboard />}
-            {currentView === 'meeting-room' && <VideoRoom />}
-            {currentView === 'team-mood' && <TeamMood />}
-            {currentView === 'meeting-dna' && <MeetingDNA />}
-            {currentView === 'kanban' && <KanbanWorkspace />}
-            {currentView === 'analytics' && <AnalyticsCenter />}
-            {currentView === 'post-meeting' && <PostMeetingReport />}
-            {currentView === 'team-workspace' && <TeamWorkspace />}
-          </motion.div>
-        </AnimatePresence>
+        <div className="flex-1">
+          {children}
+        </div>
       </main>
 
       {/* Global Overlays */}
@@ -392,6 +383,100 @@ export const App: React.FC = () => {
       </div>
 
     </div>
+  );
+};
+
+// Wrapper component for room routes that syncs URL param to store
+const RoomPage: React.FC = () => {
+  const { activeMeetingId, joinMeeting } = useStore();
+  const location = useLocation();
+  
+  // Extract roomId from URL path: /room/SOME_ID
+  const pathParts = location.pathname.split('/');
+  const urlRoomId = pathParts[2]; // /room/:id
+
+  useEffect(() => {
+    if (urlRoomId && urlRoomId !== activeMeetingId) {
+      joinMeeting(urlRoomId).catch(() => {
+        // If join fails, keep the user on the room page so they can see the error.
+      });
+    }
+  }, [urlRoomId]);
+
+  return <VideoRoom />;
+};
+
+export const App: React.FC = () => {
+  const { 
+    currentView, 
+    setCurrentView, 
+    initializeStore,
+  } = useStore();
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // On mount: if user has a JWT, restore their session
+  useEffect(() => {
+    const token = localStorage.getItem('intellmeet_jwt');
+    if (token) {
+      // If they're on the root or auth page, redirect to dashboard
+      if (location.pathname === '/' || location.pathname === '/auth') {
+        setCurrentView('dashboard');
+        navigate('/dashboard');
+      } else {
+        // Sync currentView from the URL
+        const matched = pathToView[location.pathname] || pathToView['/' + location.pathname.split('/')[1]];
+        if (matched) setCurrentView(matched);
+      }
+      initializeStore();
+    }
+  }, []);
+
+  // Keep zustand currentView in sync when URL changes externally
+  useEffect(() => {
+    const basePath = '/' + location.pathname.split('/')[1];
+    const matched = pathToView[location.pathname] || pathToView[basePath];
+    if (matched && matched !== currentView) {
+      setCurrentView(matched);
+    }
+  }, [location.pathname]);
+
+  return (
+    <Routes>
+      {/* Public routes — no shell */}
+      <Route path="/" element={
+        <div className="w-full">
+          <LandingPage />
+          <CommandMenu />
+        </div>
+      } />
+      <Route path="/auth" element={
+        <div className="w-full">
+          <AuthPages />
+          <CommandMenu />
+        </div>
+      } />
+
+      {/* Authenticated routes — wrapped in AppShell */}
+      <Route path="/dashboard" element={<AppShell><Dashboard /></AppShell>} />
+      <Route path="/room" element={<AppShell><RoomPage /></AppShell>} />
+      <Route path="/room/:roomId" element={<AppShell><RoomPage /></AppShell>} />
+      <Route path="/team-mood" element={<AppShell><TeamMood /></AppShell>} />
+      <Route path="/meeting-dna" element={<AppShell><MeetingDNA /></AppShell>} />
+      <Route path="/kanban" element={<AppShell><KanbanWorkspace /></AppShell>} />
+      <Route path="/analytics" element={<AppShell><AnalyticsCenter /></AppShell>} />
+      <Route path="/post-meeting" element={<AppShell><PostMeetingReport /></AppShell>} />
+      <Route path="/workspace" element={<AppShell><TeamWorkspace /></AppShell>} />
+
+      {/* Catch-all: redirect to landing */}
+      <Route path="*" element={
+        <div className="w-full">
+          <LandingPage />
+          <CommandMenu />
+        </div>
+      } />
+    </Routes>
   );
 };
 export default App;

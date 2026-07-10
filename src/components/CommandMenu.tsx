@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { Search, Terminal, BarChart2, Users, Play, CheckSquare, Settings, LogOut, ArrowRight } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -7,13 +8,13 @@ export const CommandMenu: React.FC = () => {
   const { 
     commandMenuOpen, 
     setCommandMenuOpen, 
-    setCurrentView, 
     addNotification,
     logout
   } = useStore();
   
   const [search, setSearch] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const navigate = useNavigate();
 
   // Keyboard shortcut listener
   useEffect(() => {
@@ -44,42 +45,42 @@ export const CommandMenu: React.FC = () => {
       title: 'Navigate to AI Command Center',
       subtitle: 'Open the bento-grid executive dashboard',
       shortcut: '↵ G D',
-      action: () => { setCurrentView('dashboard'); setCommandMenuOpen(false); }
+      action: () => { navigate('/dashboard'); setCommandMenuOpen(false); }
     },
     {
       icon: <Play className="w-5 h-5" style={{ color: 'var(--theme-secondary)' }} />,
       title: 'Join Video Meeting Room',
       subtitle: 'Simulate live collaborative video meeting',
       shortcut: '↵ G M',
-      action: () => { setCurrentView('meeting-room'); setCommandMenuOpen(false); }
+      action: () => { navigate('/room'); setCommandMenuOpen(false); }
     },
     {
       icon: <Users className="w-5 h-5" style={{ color: 'var(--theme-accent)' }} />,
       title: 'View Team Mood Analytics',
       subtitle: 'Flagship emotional metrics and energy tracking',
       shortcut: '↵ G T',
-      action: () => { setCurrentView('team-mood'); setCommandMenuOpen(false); }
+      action: () => { navigate('/team-mood'); setCommandMenuOpen(false); }
     },
     {
       icon: <BarChart2 className="w-5 h-5" style={{ color: 'var(--theme-primary)' }} />,
       title: 'Analyze Meeting DNA',
       subtitle: 'Inspect radar charts of last meeting outcomes',
       shortcut: '↵ G A',
-      action: () => { setCurrentView('meeting-dna'); setCommandMenuOpen(false); }
+      action: () => { navigate('/meeting-dna'); setCommandMenuOpen(false); }
     },
     {
       icon: <CheckSquare className="w-5 h-5" style={{ color: 'var(--theme-secondary)' }} />,
       title: 'Open Kanban Workspace',
       subtitle: 'Manage extracted meeting tasks & priorities',
       shortcut: '↵ G K',
-      action: () => { setCurrentView('kanban'); setCommandMenuOpen(false); }
+      action: () => { navigate('/kanban'); setCommandMenuOpen(false); }
     },
     {
       icon: <BarChart2 className="w-5 h-5" style={{ color: 'var(--theme-accent)' }} />,
       title: 'Access Analytics Center',
       subtitle: 'Review team performance charts',
       shortcut: '↵ G C',
-      action: () => { setCurrentView('analytics'); setCommandMenuOpen(false); }
+      action: () => { navigate('/analytics'); setCommandMenuOpen(false); }
     },
     {
       icon: <Settings className="w-5 h-5 text-[var(--theme-text-secondary)]" />,

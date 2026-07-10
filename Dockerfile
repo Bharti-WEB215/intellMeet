@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Copy root package files and install dependencies
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+RUN npm install --ignore-scripts
 
 # Copy source and build
 COPY index.html vite.config.ts tsconfig*.json ./
@@ -36,7 +36,7 @@ RUN addgroup -g 1001 -S nodejs && \
 
 # Install production dependencies only
 COPY server/package.json server/package-lock.json* ./server/
-RUN cd server && npm ci --omit=dev --ignore-scripts && npm cache clean --force
+RUN cd server && npm install --omit=dev --ignore-scripts && npm cache clean --force
 
 # Copy built assets
 COPY --from=frontend-builder /app/dist ./dist

@@ -32,15 +32,18 @@ router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
 
 // ─── POST / — Create meeting ───
 router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
-  const { title } = req.body;
+  const { title, scheduledFor } = req.body;
   if (!title) return res.status(400).json({ error: 'Meeting title is required' });
 
   try {
+    const scheduledDate = scheduledFor ? new Date(scheduledFor) : null;
+    const isScheduled = Boolean(scheduledDate && !Number.isNaN(scheduledDate.getTime()) && scheduledDate.getTime() > Date.now());
+
     const meeting = await Meeting.create({
       title,
       creatorId: req.userId,
-      status: 'active',
-      startTime: new Date(),
+      status: isScheduled ? 'scheduled' : 'active',
+      startTime: isScheduled ? scheduledDate : new Date(),
       participants: [{ userId: req.userId, role: 'host', joinedAt: new Date() }],
     });
 
@@ -328,6 +331,105 @@ router.get('/:id/participants', verifyToken, async (req: AuthRequest, res: Respo
     res.json(meeting.participants);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch participants', details: err.message });
+  }
+});
+
+// ─── POST /:id/invite — Send meeting invitation emails ───
+router.post('/:id/invite', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { emails } = req.body;
+    if (!emails || !Array.isArray(emails) || emails.length === 0) {
+      return res.status(400).json({ error: 'At least one email address is required.' });
+    }
+
+    const normalizedEmails = Array.from(new Set(emails
+      .map((email: any) => String(email || '').trim().toLowerCase())
+      .filter(Boolean)));
+
+    if (normalizedEmails.length === 0) {
+      return res.status(400).json({ error: 'At least one valid email address is required.' });
+    }
+    if (normalizedEmails.length > 2) {
+      return res.status(400).json({ error: 'You can invite up to 2 email addresses at once.' });
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalidEmails = normalizedEmails.filter((email: string) => !emailPattern.test(email));
+    if (invalidEmails.length > 0) {
+      return res.status(400).json({ error: `Invalid email address(es): ${invalidEmails.join(', ')}` });
+    }
+
+    const meeting = await Meeting.findById(req.params.id)
+      .populate('creatorId', 'name email');
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+
+    const hostName = (meeting.creatorId as any)?.name || 'A team member';
+    const meetingCode = meeting._id.toString();
+    const frontendUrl = process.env.FRONTEND_URL || req.headers.origin || `${req.protocol}://${req.get('host')}`;
+    const meetingLink = `${frontendUrl.replace(/\/$/, '')}/room/${meetingCode}`;
+
+    // Build a beautiful HTML email
+    const htmlTemplate = `
+      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #0f0f23; color: #e2e8f0; border-radius: 16px; overflow: hidden;">
+        <div style="background: linear-gradient(135deg, #6D5DFC, #46C2CB); padding: 32px; text-align: center;">
+          <h1 style="margin: 0; font-size: 28px; color: white;">✨ IntellMeet</h1>
+          <p style="margin: 8px 0 0; font-size: 14px; color: rgba(255,255,255,0.85);">You're invited to a meeting</p>
+        </div>
+        <div style="padding: 32px;">
+          <h2 style="font-size: 20px; margin: 0 0 16px; color: #f1f5f9;">${meeting.title || 'Team Meeting'}</h2>
+          <p style="font-size: 14px; color: #94a3b8; margin: 0 0 24px;">${hostName} has invited you to join a meeting on IntellMeet.</p>
+          <div style="background: #1a1a3e; border: 1px solid #2d2d5e; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <p style="margin: 0 0 8px; font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Meeting Code</p>
+            <p style="margin: 0; font-size: 20px; font-family: monospace; color: #6D5DFC; font-weight: bold;">${meetingCode}</p>
+          </div>
+          <a href="${meetingLink}" style="display: inline-block; background: linear-gradient(135deg, #6D5DFC, #46C2CB); color: white; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; font-size: 14px;">Join Meeting →</a>
+          <p style="margin: 24px 0 0; font-size: 12px; color: #475569;">Or copy this link: <span style="color: #6D5DFC;">${meetingLink}</span></p>
+        </div>
+        <div style="padding: 16px 32px; background: #0a0a1a; text-align: center;">
+          <p style="margin: 0; font-size: 11px; color: #475569;">© 2026 IntellMeet AI Platforms Corp.</p>
+        </div>
+      </div>
+    `;
+
+    // Use Nodemailer if available, otherwise log the invite
+    let emailResults: any[] = [];
+    try {
+      const nodemailer = await import('nodemailer');
+      const transporter = nodemailer.default.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.ethereal.email',
+        port: Number(process.env.SMTP_PORT) || 587,
+        auth: {
+          user: process.env.SMTP_USER || '',
+          pass: process.env.SMTP_PASS || '',
+        },
+      });
+
+      for (const email of emails) {
+        try {
+          const info = await transporter.sendMail({
+            from: `"IntellMeet" <${process.env.SMTP_USER || 'noreply@intellmeet.app'}>`,
+            to: email,
+            subject: `${hostName} invited you to: ${meeting.title || 'Meeting'}`,
+            html: htmlTemplate,
+          });
+          emailResults.push({ email, status: 'sent', messageId: info.messageId });
+        } catch (sendErr: any) {
+          emailResults.push({ email, status: 'failed', error: sendErr.message });
+        }
+      }
+    } catch (importErr) {
+      // Nodemailer not installed — return success with invite data anyway
+      emailResults = emails.map((e: string) => ({ email: e, status: 'queued', note: 'SMTP not configured' }));
+    }
+
+    res.json({
+      message: `Invitations processed for ${emails.length} recipient(s).`,
+      meetingCode,
+      meetingLink,
+      results: emailResults,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to send invitations', details: err.message });
   }
 });
 

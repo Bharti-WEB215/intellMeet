@@ -129,6 +129,55 @@ router.get('/trends', verifyToken, async (req: AuthRequest, res) => {
   }
 });
 
+// ─── Monthly: Meeting stats for last 12 months ───
+router.get('/monthly', verifyToken, async (req: AuthRequest, res) => {
+  try {
+    const cacheKey = `analytics:monthly:${req.userId}`;
+    const cached = await cacheGet<any>(cacheKey);
+    if (cached) return res.json(cached);
+
+    const oneYearAgo = new Date();
+    oneYearAgo.setMonth(oneYearAgo.getMonth() - 11);
+    oneYearAgo.setDate(1); // Start of that month
+
+    const monthly = await Meeting.aggregate([
+      { $match: { createdAt: { $gte: oneYearAgo } } },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' },
+          },
+          meetingCount: { $sum: 1 },
+          avgDuration: { $avg: { $ifNull: ['$duration', 0] } },
+        },
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1 } },
+      {
+        $project: {
+          _id: 0,
+          month: '$_id.month',
+          year: '$_id.year',
+          meetingCount: 1,
+          avgDuration: { $round: [{ $divide: ['$avgDuration', 60] }, 1] },
+        },
+      },
+    ]);
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const formattedMonthly = monthly.map(m => ({
+      label: `${monthNames[m.month - 1]} ${m.year}`,
+      meetingCount: m.meetingCount,
+      avgDuration: m.avgDuration,
+    }));
+
+    await cacheSet(cacheKey, formattedMonthly, 120);
+    res.json(formattedMonthly);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to compute monthly analytics', details: err.message });
+  }
+});
+
 // ─── Attendance: Meetings grouped by day-of-week ───
 router.get('/attendance', verifyToken, async (req: AuthRequest, res) => {
   try {
@@ -166,35 +215,40 @@ router.get('/attendance', verifyToken, async (req: AuthRequest, res) => {
 // ─── Meeting DNA radar metrics ───
 router.get('/meetings/:id/dna', verifyToken, async (req: AuthRequest, res) => {
   try {
-    const analytics = await MeetingAnalytics.findOne({ meetingId: req.params.id });
+    const meetingId = req.params.id;
+    const isObjectId = /^[a-fA-F0-9]{24}$/.test(meetingId);
+    const analytics = isObjectId
+      ? await MeetingAnalytics.findOne({ meetingId })
+      : null;
 
     if (!analytics) {
       // Return realistic defaults for a meeting without analytics yet
       return res.json({
-        meetingId: req.params.id,
-        collaboration: 84,
-        focus: 82,
+        meetingId,
+        collaboration_percent: 84,
+        focus_score: 82,
         engagement: 88,
         decision_quality: 90,
-        energy: 76,
+        energy_score: 76,
         participation_balance: 85,
+        positive_percent: 78,
+        actionability: 80,
       });
     }
 
     res.json({
       meetingId: analytics.meetingId,
-      collaboration: analytics.collaborationPercent,
-      focus: analytics.focusScore,
+      collaboration_percent: analytics.collaborationPercent,
+      focus_score: analytics.focusScore,
       engagement: analytics.engagementPercent,
       decision_quality: analytics.decisionQuality,
-      energy: analytics.energyScore,
+      energy_score: analytics.energyScore,
       participation_balance: analytics.participationBalance,
-      // Also include full analytics for detailed views
-      positivePercent: analytics.positivePercent,
+      positive_percent: analytics.positivePercent,
+      actionability: analytics.actionability,
       neutralPercent: analytics.neutralPercent,
       negativePercent: analytics.negativePercent,
       stressPercent: analytics.stressPercent,
-      actionability: analytics.actionability,
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve meeting DNA', details: err.message });

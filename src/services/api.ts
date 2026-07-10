@@ -1,6 +1,14 @@
 // services/api.ts
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const getApiBaseUrl = () => {
+  const configured = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  return configured.replace(/\/$/, '');
+};
+
+const getApiUrl = (path: string) => {
+  const baseUrl = getApiBaseUrl();
+  return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+};
 
 // Retrieve JWT auth token from localStorage
 const getAuthToken = () => {
@@ -18,7 +26,7 @@ const request = async (path: string, options: RequestInit = {}) => {
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(getApiUrl(path), {
     ...options,
     headers,
   });
@@ -75,10 +83,10 @@ export const api = {
   // Meetings API
   meetings: {
     list: () => request('/meetings'),
-    create: (title: string) =>
+    create: (title: string, scheduledFor?: string) =>
       request('/meetings', {
         method: 'POST',
-        body: JSON.stringify({ title }),
+        body: JSON.stringify({ title, scheduledFor }),
       }),
     get: (id: string) => request(`/meetings/${id}`),
     postTranscript: (meetingId: string, speaker_name: string, text: string) =>
@@ -94,6 +102,11 @@ export const api = {
     getSummary: (meetingId: string) => request(`/meetings/${meetingId}/summary`),
     getMessages: (meetingId: string) => request(`/meetings/${meetingId}/messages`),
     getParticipants: (meetingId: string) => request(`/meetings/${meetingId}/participants`),
+    invite: (meetingId: string, emails: string[]) =>
+      request(`/meetings/${meetingId}/invite`, {
+        method: 'POST',
+        body: JSON.stringify({ emails }),
+      }),
   },
 
   // Tasks API
@@ -166,6 +179,7 @@ export const api = {
     getDNA: (meetingId: string) => request(`/analytics/meetings/${meetingId}/dna`),
     getSentiment: (meetingId: string) => request(`/analytics/meetings/${meetingId}/sentiment`),
     getTrends: () => request('/analytics/trends'),
+    getMonthly: () => request('/analytics/monthly'),
     getAttendance: () => request('/analytics/attendance'),
   },
 };

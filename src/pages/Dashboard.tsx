@@ -1,10 +1,11 @@
 // Dashboard.tsx
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore.js';
 import { GlassCard } from '../components/GlassCard.js';
 import { 
   Calendar, Sparkles, AlertCircle, Clock, CheckCircle, 
-  Activity, Smile, Play, TrendingUp 
+  Activity, Smile, TrendingUp, Mail, X, Link, Copy 
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import { api } from '../services/api.js';
@@ -44,7 +45,11 @@ const staggerItem = {
 };
 
 export const Dashboard: React.FC = () => {
-  const { setCurrentView, tasks, fetchTasks } = useStore();
+  const { tasks, fetchTasks, createMeeting, joinMeeting, activeMeetingId, addNotification } = useStore();
+  const navigate = useNavigate();
+  const [joinMeetingId, setJoinMeetingId] = useState('');
+  const [newMeetingTitle, setNewMeetingTitle] = useState('');
+  const [scheduledFor, setScheduledFor] = useState('');
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [activities, setActivities] = useState<any[]>([]);
   const [activeMeeting, setActiveMeeting] = useState<any | null>(null);
@@ -52,6 +57,32 @@ export const Dashboard: React.FC = () => {
   const [focusData, setFocusData] = useState<any[]>(fallbackFocusData);
   const [aiRecommendation, setAiRecommendation] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmails, setInviteEmails] = useState('');
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+
+  const validateInviteEmails = (value: string) => {
+    const emails = value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (emails.length === 0) {
+      return { emails: [], error: 'Enter one or two email addresses.' };
+    }
+    if (emails.length > 2) {
+      return { emails, error: 'You can invite up to 2 email addresses at once.' };
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalid = emails.filter((email) => !emailPattern.test(email));
+    if (invalid.length > 0) {
+      return { emails, error: `Invalid email address: ${invalid.join(', ')}` };
+    }
+
+    return { emails, error: '' };
+  };
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -157,15 +188,101 @@ export const Dashboard: React.FC = () => {
           <p className="text-xs text-[var(--theme-text-secondary)] mt-1.5 tracking-wide">Real-time collaboration monitoring & sentiment metrics</p>
         </div>
         
-        {/* Quick Action Button */}
-        <button 
-          onClick={() => setCurrentView('meeting-room')}
-          className="btn-magnetic flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#06B6D4] text-white border border-white/10 hover:-translate-y-0.5 transition-all duration-300 text-xs font-bold cursor-pointer"
-          style={{ boxShadow: 'var(--theme-glow-primary)' }}
-        >
-          <Play className="w-4 h-4 fill-white text-white" />
-          <span>Launch Live Sync Room</span>
-        </button>
+        {/* Quick Action Buttons */}
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <div className="flex items-center gap-2">
+              <input 
+                type="text" 
+                placeholder="Meeting code or invite link" 
+                value={joinMeetingId}
+                onChange={(e) => setJoinMeetingId(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && joinMeetingId.trim()) {
+                    try {
+                      const joinedMeetingId = await joinMeeting(joinMeetingId.trim());
+                      if (joinedMeetingId) {
+                        navigate('/room/' + joinedMeetingId);
+                      }
+                    } catch (err) {
+                      console.error('Failed to join meeting', err);
+                    }
+                  }
+                }}
+                className="bg-[var(--theme-surface-alt)] border border-[var(--theme-border)] rounded-xl px-3 py-3 text-xs text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-primary/50 transition-colors w-40"
+              />
+              <button 
+                onClick={async () => {
+                  if (!joinMeetingId.trim()) return;
+                  try {
+                    const joinedMeetingId = await joinMeeting(joinMeetingId.trim());
+                    if (joinedMeetingId) {
+                      navigate('/room/' + joinedMeetingId);
+                    }
+                  } catch (err) {
+                    console.error('Failed to join meeting', err);
+                  }
+                }}
+                className="btn-magnetic flex items-center gap-2 px-4 py-3 rounded-xl bg-[var(--theme-surface-alt)] border border-[var(--theme-border)] hover:bg-[var(--theme-surface-hover)] hover:-translate-y-0.5 transition-all duration-300 text-xs font-bold cursor-pointer"
+              >
+                Join
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="New meeting title"
+                value={newMeetingTitle}
+                onChange={(e) => setNewMeetingTitle(e.target.value)}
+                className="bg-[var(--theme-surface-alt)] border border-[var(--theme-border)] rounded-xl px-3 py-3 text-xs text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-primary/50 transition-colors w-40"
+              />
+              <button
+                onClick={async () => {
+                  try {
+                    const meetingId = await createMeeting(newMeetingTitle.trim() || 'Team Sync Meeting');
+                    setNewMeetingTitle('');
+                    navigate('/room/' + meetingId);
+                  } catch (err) {
+                    console.error('Failed to create meeting', err);
+                  }
+                }}
+                className="btn-magnetic flex items-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#06B6D4] text-white border border-white/10 hover:-translate-y-0.5 transition-all duration-300 text-xs font-bold cursor-pointer"
+                style={{ boxShadow: 'var(--theme-glow-primary)' }}
+              >
+                New meeting
+              </button>
+              <input
+                type="datetime-local"
+                value={scheduledFor}
+                onChange={(e) => setScheduledFor(e.target.value)}
+                className="bg-[var(--theme-surface-alt)] border border-[var(--theme-border)] rounded-xl px-3 py-3 text-xs text-[var(--theme-text)] focus:outline-none focus:border-primary/50 transition-colors"
+              />
+              <button
+                onClick={async () => {
+                  try {
+                    const meetingId = await createMeeting(newMeetingTitle.trim() || 'Scheduled Team Sync', scheduledFor || undefined);
+                    setNewMeetingTitle('');
+                    setScheduledFor('');
+                    addNotification('Meeting scheduled successfully', 'success');
+                    navigate('/room/' + meetingId);
+                  } catch (err) {
+                    console.error('Failed to schedule meeting', err);
+                  }
+                }}
+                className="btn-magnetic flex items-center gap-2 px-4 py-3 rounded-xl bg-[var(--theme-surface-alt)] border border-[var(--theme-border)] hover:bg-[var(--theme-surface-hover)] hover:-translate-y-0.5 transition-all duration-300 text-xs font-bold cursor-pointer"
+              >
+                Schedule
+              </button>
+            </div>
+            <button 
+              onClick={() => setShowInviteModal(true)}
+              className="btn-magnetic flex items-center justify-center p-3 rounded-xl bg-[var(--theme-surface-alt)] border border-[var(--theme-border)] hover:bg-[var(--theme-surface-hover)] hover:-translate-y-0.5 transition-all duration-300 text-xs font-bold cursor-pointer text-primary"
+              title="Invite via Email"
+            >
+              <Mail className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
       
       {/* 10 Widgets in Bento Grid Layout */}
@@ -178,7 +295,7 @@ export const Dashboard: React.FC = () => {
         
         {/* Widget 1: Meetings Today (col-span-2) */}
         <motion.div variants={staggerItem} className="col-span-1 md:col-span-2 row-span-1">
-          <GlassCard hoverable className="h-full border-[var(--theme-border)] flex flex-col justify-between" onClick={() => setCurrentView('meeting-room')}>
+          <GlassCard hoverable className="h-full border-[var(--theme-border)] flex flex-col justify-between" onClick={() => navigate('/room')}>
             <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
               <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-primary" /> Active Workspace Session</span>
               {activeMeeting?.status === 'active' && (
@@ -217,7 +334,7 @@ export const Dashboard: React.FC = () => {
 
         {/* Widget 3: Pending Action Items */}
         <motion.div variants={staggerItem} className="col-span-1">
-          <GlassCard hoverable className="h-full border-[var(--theme-border)] flex flex-col justify-between" onClick={() => setCurrentView('kanban')}>
+          <GlassCard hoverable className="h-full border-[var(--theme-border)] flex flex-col justify-between" onClick={() => navigate('/kanban')}>
             <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
               <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-secondary" /> Pending Goals</span>
               <span className="rounded bg-[var(--theme-surface-alt)] px-2 py-0.5 text-[9px] font-mono font-bold text-[var(--theme-text-muted)]">{todoTasksCount} left</span>
@@ -231,7 +348,7 @@ export const Dashboard: React.FC = () => {
 
         {/* Widget 4: Productivity Score (col-span-1, row-span-2) */}
         <motion.div variants={staggerItem} className="col-span-1 row-span-2">
-          <GlassCard hoverable className="h-full border-[var(--theme-border)] flex flex-col justify-between" onClick={() => setCurrentView('analytics')}>
+          <GlassCard hoverable className="h-full border-[var(--theme-border)] flex flex-col justify-between" onClick={() => navigate('/analytics')}>
             <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
               <span className="font-heading font-semibold">Overall Productivity</span>
               <TrendingUp className="w-4 h-4 text-primary" />
@@ -262,7 +379,7 @@ export const Dashboard: React.FC = () => {
 
         {/* Widget 5: Team Health Score */}
         <motion.div variants={staggerItem} className="col-span-1">
-          <GlassCard hoverable className="h-full border-[var(--theme-border)] flex flex-col justify-between" onClick={() => setCurrentView('team-mood')}>
+          <GlassCard hoverable className="h-full border-[var(--theme-border)] flex flex-col justify-between" onClick={() => navigate('/team-mood')}>
             <div className="flex justify-between items-center text-xs text-[var(--theme-text-secondary)]">
               <span className="flex items-center gap-1.5"><Smile className="w-4 h-4 text-accent" /> Emotional Energy</span>
               <span className="text-[9px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">EXCELLENT</span>
@@ -363,6 +480,113 @@ export const Dashboard: React.FC = () => {
         </motion.div>
 
       </motion.div>
+
+      {/* Invite via Email Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowInviteModal(false)}>
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          {/* Modal */}
+          <div
+            className="relative z-10 w-full max-w-md mx-4 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)]/80 backdrop-blur-xl p-6 space-y-5"
+            style={{ boxShadow: 'var(--theme-card-shadow-elevated)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <h3 className="font-heading text-sm font-bold text-[var(--theme-text)] flex items-center gap-2">
+                <Mail className="w-4 h-4 text-primary" /> Invite to Meeting
+              </h3>
+              <button onClick={() => setShowInviteModal(false)} className="p-1 rounded-lg hover:bg-[var(--theme-surface-alt)] transition-colors cursor-pointer">
+                <X className="w-4 h-4 text-[var(--theme-text-muted)]" />
+              </button>
+            </div>
+
+            {/* Email Input */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-[var(--theme-text-secondary)] uppercase tracking-wider">Email Addresses (comma-separated)</label>
+              <input
+                type="text"
+                placeholder="alice@example.com, bob@example.com"
+                value={inviteEmails}
+                onChange={(e) => {
+                  setInviteEmails(e.target.value);
+                  if (inviteError) {
+                    setInviteError('');
+                  }
+                }}
+                className="w-full bg-[var(--theme-input-bg)] border border-[var(--theme-border)] rounded-xl px-3 py-2.5 text-xs text-[var(--theme-text)] placeholder-[var(--theme-text-muted)] focus:outline-none focus:border-primary/50 transition-colors"
+              />
+              <p className="text-[10px] text-[var(--theme-text-secondary)] mt-1">Invite one or two email addresses separated by commas.</p>
+              {inviteError && (
+                <p className="text-[10px] text-red-400 mt-1">{inviteError}</p>
+              )}
+            </div>
+
+            {/* Send Invitations Button */}
+            <button
+              disabled={inviteSending || !inviteEmails.trim()}
+              onClick={async () => {
+                if (!activeMeetingId || !inviteEmails.trim()) return;
+
+                const validation = validateInviteEmails(inviteEmails);
+                if (validation.error) {
+                  setInviteError(validation.error);
+                  return;
+                }
+
+                setInviteSending(true);
+                try {
+                  await api.meetings.invite(activeMeetingId, validation.emails);
+                  addNotification(`Invitations sent to ${validation.emails.length} recipient(s)`, 'success');
+                  setInviteEmails('');
+                  setInviteError('');
+                  setShowInviteModal(false);
+                } catch (err) {
+                  addNotification('Failed to send invitations', 'warning');
+                } finally {
+                  setInviteSending(false);
+                }
+              }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#06B6D4] text-white text-xs font-bold border border-white/10 hover:opacity-90 transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ boxShadow: 'var(--theme-glow-primary)' }}
+            >
+              {inviteSending ? 'Sending...' : 'Send Invitations'}
+            </button>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-[var(--theme-divider)]" />
+              <span className="text-[9px] text-[var(--theme-text-muted)] font-mono uppercase tracking-wider">or share directly</span>
+              <div className="flex-1 h-px bg-[var(--theme-divider)]" />
+            </div>
+
+            {/* Copy Link & Copy Code Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  const link = `${window.location.origin}/room/${activeMeetingId}`;
+                  navigator.clipboard.writeText(link);
+                  addNotification('Meeting link copied to clipboard', 'success');
+                }}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[var(--theme-surface-alt)] border border-[var(--theme-border)] hover:bg-[var(--theme-surface-hover)] transition-all duration-200 text-xs font-bold cursor-pointer text-[var(--theme-text)]"
+              >
+                <Link className="w-3.5 h-3.5 text-primary" /> Copy Meeting Link
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(activeMeetingId || '');
+                  addNotification('Meeting code copied to clipboard', 'success');
+                }}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[var(--theme-surface-alt)] border border-[var(--theme-border)] hover:bg-[var(--theme-surface-hover)] transition-all duration-200 text-xs font-bold cursor-pointer text-[var(--theme-text)]"
+              >
+                <Copy className="w-3.5 h-3.5 text-primary" /> Copy Meeting Code
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </motion.div>
   );
 };

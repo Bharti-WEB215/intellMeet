@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { GlassCard } from '../components/GlassCard';
 import ThemeToggle from '../components/ThemeToggle';
@@ -6,7 +7,8 @@ import { Sparkles, ArrowLeft, Mail, Lock, User, AlertCircle, Shield, Zap } from 
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const AuthPages: React.FC = () => {
-  const { authMode, setAuthMode, login, register, setCurrentView, theme, toggleTheme, addNotification } = useStore();
+  const { authMode, setAuthMode, login, register, theme, toggleTheme, addNotification } = useStore();
+  const navigate = useNavigate();
   
   // Inputs
   const [email, setEmail] = useState('');
@@ -26,6 +28,7 @@ export const AuthPages: React.FC = () => {
     setIsLoading(true);
     try {
       await login(email, password);
+      navigate('/dashboard');
     } catch (err: any) {
       setErrorMsg(err.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -43,6 +46,7 @@ export const AuthPages: React.FC = () => {
     setIsLoading(true);
     try {
       await register(name, email, password);
+      navigate('/dashboard');
     } catch (err: any) {
       setErrorMsg(err.message || 'Registration failed. Please try again.');
     } finally {
@@ -111,7 +115,7 @@ export const AuthPages: React.FC = () => {
         {/* Header link back to landing */}
         <div className="flex items-center justify-between z-10">
           <div
-            onClick={() => setCurrentView('landing')} 
+            onClick={() => navigate('/')} 
             className="flex items-center space-x-2.5 cursor-pointer"
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[var(--theme-primary)] to-[var(--theme-secondary)] flex items-center justify-center shadow-lg" style={{ boxShadow: 'var(--theme-glow-primary)' }}>
@@ -210,7 +214,7 @@ export const AuthPages: React.FC = () => {
         </div>
         
         <button 
-          onClick={() => setCurrentView('landing')}
+          onClick={() => navigate('/')}
           className="absolute top-6 left-6 text-xs text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] flex items-center gap-1.5 font-medium transition-colors"
         >
           <ArrowLeft className="w-4 h-4" /> Back to home
@@ -307,7 +311,23 @@ export const AuthPages: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <motion.button 
-                    onClick={() => addNotification('Google OAuth coming soon', 'info')}
+                    onClick={async () => {
+                      const mockEmail = window.prompt('Enter your Gmail address to continue with Google:', 'demo@gmail.com');
+                      if (!mockEmail) return;
+                      const googlePassword = 'google_oauth_mock_password';
+                      try {
+                        await login(mockEmail, googlePassword);
+                        navigate('/dashboard');
+                      } catch (err) {
+                        try {
+                          await register(mockEmail.split('@')[0], mockEmail, googlePassword);
+                          await login(mockEmail, googlePassword);
+                          navigate('/dashboard');
+                        } catch (regErr: any) {
+                          addNotification('Google Sign-In failed: ' + regErr.message, 'warning');
+                        }
+                      }
+                    }}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className="flex items-center justify-center gap-2 border border-[var(--theme-border)] rounded-xl py-3 text-xs font-semibold hover:bg-[var(--theme-surface-hover)] transition-all cursor-pointer bg-[var(--theme-surface-alt)] hover:border-[var(--theme-border-hover)]"

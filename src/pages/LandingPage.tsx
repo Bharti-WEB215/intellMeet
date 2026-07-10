@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { GlassCard } from '../components/GlassCard';
 import {
@@ -268,7 +269,8 @@ const ScrollSection: React.FC<{
    MAIN LANDING PAGE COMPONENT
    ═══════════════════════════════════════════════════════════ */
 export const LandingPage: React.FC = () => {
-  const { setCurrentView, theme, toggleTheme } = useStore();
+  const { theme, toggleTheme } = useStore();
+  const navigate = useNavigate();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   /* — Typewriter transcript animation — */
@@ -364,7 +366,7 @@ export const LandingPage: React.FC = () => {
           {/* Logo */}
           <div
             className="flex items-center space-x-2.5 cursor-pointer group"
-            onClick={() => setCurrentView('landing')}
+            onClick={() => navigate('/')}
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[var(--theme-primary)] to-[var(--theme-secondary)] flex items-center justify-center shadow-lg transition-transform group-hover:scale-105">
               <Sparkles className="w-5 h-5 text-white" />
@@ -400,13 +402,13 @@ export const LandingPage: React.FC = () => {
           <div className="flex items-center space-x-3">
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <button
-              onClick={() => setCurrentView('auth')}
+              onClick={() => navigate('/auth')}
               className="hidden sm:inline-flex text-[13px] font-semibold text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] transition-colors cursor-pointer"
             >
               Sign In
             </button>
             <button
-              onClick={() => setCurrentView('auth')}
+              onClick={() => navigate('/auth')}
               className="btn-glow btn-magnetic text-[12px] font-bold px-5 py-2.5 rounded-xl text-white border border-[var(--theme-primary)]/20 shadow-lg cursor-pointer"
               style={{ background: 'var(--theme-primary)' }}
             >
@@ -464,7 +466,7 @@ export const LandingPage: React.FC = () => {
             className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2"
           >
             <button
-              onClick={() => setCurrentView('auth')}
+              onClick={() => navigate('/auth')}
               className="btn-glow btn-magnetic w-full sm:w-auto px-7 py-3.5 text-white font-bold rounded-xl border border-white/10 shadow-xl flex items-center justify-center space-x-2 cursor-pointer text-[13px]"
               style={{ background: 'var(--theme-primary)' }}
             >

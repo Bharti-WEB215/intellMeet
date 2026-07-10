@@ -37,14 +37,16 @@ export const AnalyticsCenter: React.FC = () => {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [trendData, setTrendData] = useState<Array<{week: string; effectiveness: number; productivity: number}>>([]);
+  const [monthlyData, setMonthlyData] = useState<Array<{label: string; meetingCount: number; avgDuration: number}>>([]);
   const [attendanceData, setAttendanceData] = useState<Array<{day: string; count: number}>>([]);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const [dashData, trends, attendance] = await Promise.all([
+        const [dashData, trends, monthly, attendance] = await Promise.all([
           api.analytics.getDashboard().catch(() => null),
           api.analytics.getTrends().catch(() => []),
+          api.analytics.getMonthly().catch(() => []),
           api.analytics.getAttendance().catch(() => []),
         ]);
         
@@ -63,6 +65,7 @@ export const AnalyticsCenter: React.FC = () => {
 
         setMetrics(dashData || fallbackMDetails);
         if (trends && trends.length) setTrendData(trends);
+        if (monthly && monthly.length) setMonthlyData(monthly);
         if (attendance && attendance.length) setAttendanceData(attendance);
       } catch (err) {
         console.error('Failed to fetch executive metrics:', err);
@@ -193,6 +196,31 @@ export const AnalyticsCenter: React.FC = () => {
                   <YAxis stroke="var(--theme-chart-axis)" fontSize={9} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ background: 'var(--theme-surface)', border: '1px solid var(--theme-border)', fontSize: '10px', borderRadius: '12px' }} />
                   <Bar dataKey="count" fill="#22FFB2" radius={[4, 4, 0, 0]} name="Meetings Logged" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </GlassCard>
+        </motion.div>
+
+        {/* Monthly Activity */}
+        <motion.div
+          className="lg:col-span-2"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+        >
+          <GlassCard className="border-[var(--theme-border)] flex flex-col justify-between min-h-[300px]">
+            <h3 className="font-heading text-sm font-bold text-[var(--theme-text-secondary)] flex items-center gap-2 mb-4">
+              <Calendar className="w-4 h-4 text-accent" /> Monthly Meeting Volume (Last 12 Months)
+            </h3>
+            <div className="flex-1 min-h-[220px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData} margin={{ top: 5, right: 10, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--theme-grid-line)" />
+                  <XAxis dataKey="label" stroke="var(--theme-chart-axis)" fontSize={9} tickLine={false} axisLine={false} />
+                  <YAxis stroke="var(--theme-chart-axis)" fontSize={9} tickLine={false} axisLine={false} />
+                  <Tooltip contentStyle={{ background: 'var(--theme-surface)', border: '1px solid var(--theme-border)', fontSize: '10px', borderRadius: '12px' }} />
+                  <Bar dataKey="meetingCount" fill="#F472B6" radius={[4, 4, 0, 0]} name="Total Meetings" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

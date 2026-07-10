@@ -123,7 +123,7 @@ interface StoreState {
   removeNotification: (id: string) => void;
   
   // Meeting Actions
-  startMeeting: (title: string) => Promise<string>;
+  startMeeting: (titleOrId: string) => Promise<string>;
   toggleMute: () => void;
   toggleVideo: () => void;
   toggleRecording: () => void;
@@ -131,6 +131,8 @@ interface StoreState {
   setMeetingTime: (time: number) => void;
   endActiveMeeting: () => Promise<any>;
   resetMeeting: () => void;
+  createMeeting: (title: string, scheduledFor?: string) => Promise<string>;
+  joinMeeting: (meetingId: string) => Promise<string>;
   
   // Kanban Actions
   fetchTasks: () => Promise<void>;
@@ -178,6 +180,22 @@ const mapDbTask = (t: any): Task => ({
   deadline: t.deadline || 'June 10, 2026',
   status: t.status || 'todo',
 });
+
+const normalizeMeetingInput = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+
+  try {
+    const url = new URL(trimmed);
+    const match = url.pathname.match(/\/room\/([^/?#]+)/);
+    if (match?.[1]) return match[1];
+  } catch {
+    // Not a full URL; fall through to direct parsing below.
+  }
+
+  const directMatch = trimmed.match(/(?:\/room\/|meetingId=)([^/?#]+)/i);
+  return directMatch?.[1] || trimmed;
+};
 
 export const useStore = create<StoreState>((set, get) => ({
   // Navigation & UI
@@ -378,14 +396,58 @@ export const useStore = create<StoreState>((set, get) => ({
   })),
   
   // Meeting Actions
-  startMeeting: async (title) => {
+  createMeeting: async (title, scheduledFor) => {
+    const meetingTitle = title.trim() || 'Team Sync Meeting';
     try {
-      const mtg = await api.meetings.create(title);
-      set({ activeMeetingId: mtg.id, meetingTime: 0 });
-      get().addNotification(`Meeting "${title}" started. Joining conference...`, 'success');
-      return mtg.id;
+      const mtg = await api.meetings.create(meetingTitle, scheduledFor);
+      const meetingId = mtg.id || mtg._id;
+      if (!meetingId) {
+        throw new Error('Meeting ID not returned from backend');
+      }
+      set({ activeMeetingId: meetingId, meetingTime: 0 });
+      get().addNotification(
+        scheduledFor ? `Meeting "${mtg.title}" scheduled successfully.` : `Meeting "${mtg.title}" created. Joining conference...`,
+        'success'
+      );
+      return meetingId;
     } catch (err) {
       get().addNotification('Failed to create meeting session', 'warning');
+      throw err;
+    }
+  },
+
+  joinMeeting: async (meetingId) => {
+    const normalizedMeetingId = normalizeMeetingInput(meetingId);
+    if (!normalizedMeetingId) {
+      get().addNotification('Enter a valid meeting code or invite link.', 'warning');
+      throw new Error('Missing meeting identifier');
+    }
+
+    try {
+      const mtg = await api.meetings.get(normalizedMeetingId);
+      const meetingId = mtg.id || mtg._id || normalizedMeetingId;
+      set({ activeMeetingId: meetingId, meetingTime: 0 });
+      get().addNotification(`Joined meeting "${mtg.title}".`, 'success');
+      return meetingId;
+    } catch (err) {
+      get().addNotification('Unable to join this meeting. Confirm the code or invite link is correct.', 'warning');
+      throw err;
+    }
+  },
+
+  startMeeting: async (titleOrId) => {
+    try {
+      let mtg;
+      try {
+        mtg = await api.meetings.get(titleOrId);
+      } catch (e) {
+        mtg = await api.meetings.create(titleOrId);
+      }
+      set({ activeMeetingId: mtg.id, meetingTime: 0 });
+      get().addNotification(`Meeting "${mtg.title || titleOrId}" active. Joining conference...`, 'success');
+      return mtg.id;
+    } catch (err) {
+      get().addNotification('Failed to create or join meeting session', 'warning');
       throw err;
     }
   },

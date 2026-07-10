@@ -1,11 +1,12 @@
 // VideoRoom.tsx
 import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore.js';
 import { GlassCard } from '../components/GlassCard.js';
 import { 
   Mic, MicOff, Video, VideoOff, ScreenShare, 
   Radio, PhoneOff, Users, Sparkles, 
-  Send 
+  Send, Link, Copy 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSocket } from '../services/socket.js';
@@ -26,6 +27,7 @@ export const VideoRoom: React.FC = () => {
     toggleMute, toggleVideo, toggleRecording, toggleScreenShare,
     addNotification, setCurrentView, activeMeetingId, startMeeting, endActiveMeeting
   } = useStore();
+  const navigate = useNavigate();
 
   // ---------- Real Screen Share Handler ----------
   const handleToggleScreenShare = async () => {
@@ -34,6 +36,9 @@ export const VideoRoom: React.FC = () => {
       try {
         const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
         const cameraTrack = cameraStream.getVideoTracks()[0];
+        
+        // Respect current video off state
+        cameraTrack.enabled = !isVideoOff;
 
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = cameraStream;
@@ -79,6 +84,22 @@ export const VideoRoom: React.FC = () => {
     }
   };
 
+  const handleToggleMic = () => {
+    const newState = !isMuted;
+    if (localStream) {
+      localStream.getAudioTracks().forEach(t => t.enabled = !newState);
+    }
+    toggleMute();
+  };
+
+  const handleToggleVideo = () => {
+    const newState = !isVideoOff;
+    if (localStream) {
+      localStream.getVideoTracks().forEach(t => t.enabled = !newState);
+    }
+    toggleVideo();
+  };
+
   const [meetingTimer, setMeetingTimer] = useState(0);
   const [meetingTitle, setMeetingTitle] = useState('Workspace General Sync');
   const [liveTranscript, setLiveTranscript] = useState<Array<{ speaker_name: string; text: string }>>([]);
@@ -96,6 +117,33 @@ export const VideoRoom: React.FC = () => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const socket = getSocket();
+
+  const [floatingReactions, setFloatingReactions] = useState<{id: string, emoji: string, userId: string}[]>([]);
+
+  // Listen for remote reactions
+  useEffect(() => {
+    const handleReaction = ({ emoji, userId }: { emoji: string, userId: string }) => {
+      const newReaction = { id: Math.random().toString(), emoji, userId };
+      setFloatingReactions(prev => [...prev, newReaction]);
+      setTimeout(() => {
+        setFloatingReactions(prev => prev.filter(r => r.id !== newReaction.id));
+      }, 3000);
+    };
+    socket.on('reaction', handleReaction);
+    return () => { socket.off('reaction', handleReaction); };
+  }, []);
+
+  const sendReaction = (emoji: string) => {
+    if (!activeMeetingId) return;
+    const userId = localStorage.getItem('intellmeet_jwt') || 'local'; // Mock userId for demo
+    socket.emit('reaction', { roomId: activeMeetingId, emoji, userId });
+    // Show locally as well
+    const newReaction = { id: Math.random().toString(), emoji, userId };
+    setFloatingReactions(prev => [...prev, newReaction]);
+    setTimeout(() => {
+      setFloatingReactions(prev => prev.filter(r => r.id !== newReaction.id));
+    }, 3000);
+  };
 
   // Create meeting if none is active on load
   useEffect(() => {
@@ -157,18 +205,7 @@ export const VideoRoom: React.FC = () => {
     };
   }, []);
 
-  // Update track enabled state on mute or video toggles
-  useEffect(() => {
-    if (localStream) {
-      localStream.getAudioTracks().forEach(track => track.enabled = !isMuted);
-    }
-  }, [isMuted, localStream]);
-
-  useEffect(() => {
-    if (localStream) {
-      localStream.getVideoTracks().forEach(track => track.enabled = !isVideoOff);
-    }
-  }, [isVideoOff, localStream]);
+  // (Removed redundant track enabled effects since they are now handled in click handlers)
 
   // Coordinate WebRTC Multi-Peer Mesh over Socket.IO
   useEffect(() => {
@@ -447,6 +484,7 @@ export const VideoRoom: React.FC = () => {
     addNotification('Wrapping up session analysis...', 'success');
     await endActiveMeeting();
     setCurrentView('post-meeting');
+    navigate('/post-meeting');
   };
 
   const formatTime = (secs: number) => {
@@ -518,7 +556,32 @@ export const VideoRoom: React.FC = () => {
           <div className="bg-[var(--theme-input-bg)] border border-[var(--theme-divider)] p-3 rounded-xl space-y-1">
             <span className="text-[9px] text-[var(--theme-text-muted)] font-mono tracking-wider block">MEETING IDENTITY</span>
             <span className="text-xs font-bold text-[var(--theme-text)] block truncate">{meetingTitle}</span>
-            <span className="text-[10px] text-primary font-bold font-mono">Timer: {formatTime(meetingTimer)}</span>
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[10px] text-primary font-bold font-mono">Timer: {formatTime(meetingTimer)}</span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    const link = `${window.location.origin}/room/${activeMeetingId}`;
+                    navigator.clipboard.writeText(link);
+                    addNotification('Meeting link copied!', 'success');
+                  }}
+                  className="p-1 rounded-md hover:bg-[var(--theme-surface-alt)] transition-colors cursor-pointer"
+                  title="Copy Meeting Link"
+                >
+                  <Link className="w-3 h-3 text-[var(--theme-text-muted)] hover:text-primary" />
+                </button>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(activeMeetingId || '');
+                    addNotification('Meeting code copied!', 'success');
+                  }}
+                  className="p-1 rounded-md hover:bg-[var(--theme-surface-alt)] transition-colors cursor-pointer"
+                  title="Copy Meeting Code"
+                >
+                  <Copy className="w-3 h-3 text-[var(--theme-text-muted)] hover:text-primary" />
+                </button>
+              </div>
+            </div>
           </div>
         </GlassCard>
       </div>
@@ -546,7 +609,26 @@ export const VideoRoom: React.FC = () => {
         </AnimatePresence>
 
         {/* Video feed boxes grid */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-[350px]">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-[350px] relative">
+          
+          {/* Floating Reactions Layer */}
+          <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+            <AnimatePresence>
+              {floatingReactions.map((r) => (
+                <motion.div
+                  key={r.id}
+                  initial={{ opacity: 0, y: 50, scale: 0.5, x: Math.random() * 40 - 20 }}
+                  animate={{ opacity: 1, y: -200, scale: 2, x: Math.random() * 60 - 30 }}
+                  exit={{ opacity: 0, y: -250 }}
+                  transition={{ duration: 2, ease: "easeOut" }}
+                  className="absolute bottom-10 left-1/2 text-4xl"
+                >
+                  {r.emoji}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
           {/* Local Feed */}
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
@@ -621,7 +703,25 @@ export const VideoRoom: React.FC = () => {
         </div>
 
         {/* BOTTOM: Floating Glass Control Dock */}
-        <div className="flex justify-center items-center py-2 relative z-25">
+        <div className="flex flex-col justify-center items-center py-2 relative z-25 space-y-4">
+          
+          {/* Reaction Bar */}
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center space-x-2 bg-[var(--theme-surface-alt)]/80 backdrop-blur-md rounded-full px-4 py-1.5 border border-[var(--theme-border)] shadow-lg"
+          >
+            {['👍', '🎉', '❤️', '👏', '🤔'].map(emoji => (
+              <button 
+                key={emoji}
+                onClick={() => sendReaction(emoji)}
+                className="hover:scale-125 transition-transform duration-200 cursor-pointer text-xl"
+              >
+                {emoji}
+              </button>
+            ))}
+          </motion.div>
+
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -631,7 +731,7 @@ export const VideoRoom: React.FC = () => {
           >
             {/* Toggle Mic */}
             <button 
-              onClick={toggleMute}
+              onClick={handleToggleMic}
               className={`p-3 rounded-xl border transition-all duration-200 cursor-pointer ${
                 isMuted 
                   ? 'bg-red-500/25 border-red-500/40 text-red-500 hover:bg-red-500/35' 
@@ -643,7 +743,7 @@ export const VideoRoom: React.FC = () => {
 
             {/* Toggle Cam */}
             <button 
-              onClick={toggleVideo}
+              onClick={handleToggleVideo}
               className={`p-3 rounded-xl border transition-all duration-200 cursor-pointer ${
                 isVideoOff 
                   ? 'bg-red-500/25 border-red-500/40 text-red-500 hover:bg-red-500/35' 

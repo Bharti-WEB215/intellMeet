@@ -1,5 +1,6 @@
 // PostMeetingReport.tsx
 import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { GlassCard } from '../components/GlassCard.js';
 import { useStore } from '../store/useStore.js';
 import { 
@@ -36,7 +37,8 @@ interface MeetingReport {
 }
 
 export const PostMeetingReport: React.FC = () => {
-  const { setCurrentView, addNotification, tasks, activeMeetingId, fetchTasks } = useStore();
+  const { addNotification, tasks, activeMeetingId, fetchTasks } = useStore();
+  const navigate = useNavigate();
   const [report, setReport] = useState<MeetingReport | null>(null);
   const [meetingTitle, setMeetingTitle] = useState('Sync Sync Session');
   const [participants, setParticipants] = useState<any[]>([]);
@@ -164,7 +166,7 @@ export const PostMeetingReport: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--theme-divider)] pb-4">
         <div className="flex items-center space-x-3">
           <button 
-            onClick={() => setCurrentView('dashboard')}
+            onClick={() => navigate('/dashboard')}
             className="p-2 bg-[var(--theme-surface-alt)] hover:bg-[var(--theme-surface-hover)] rounded-xl transition-colors cursor-pointer border border-[var(--theme-border)]"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -247,7 +249,7 @@ export const PostMeetingReport: React.FC = () => {
                 <Sparkles className="w-5 h-5 text-secondary" /> Extracted Action Items
               </h3>
               <button 
-                onClick={() => setCurrentView('kanban')}
+                onClick={() => navigate('/kanban')}
                 className="text-xs text-primary font-bold hover:underline cursor-pointer"
               >
                 Go to Kanban Board
@@ -316,7 +318,7 @@ export const PostMeetingReport: React.FC = () => {
             </div>
 
             <button 
-              onClick={() => setCurrentView('meeting-dna')}
+              onClick={() => navigate('/meeting-dna')}
               className="w-full py-2.5 rounded-xl border border-[var(--theme-border)] hover:bg-[var(--theme-surface-hover)] transition-colors text-xs font-semibold cursor-pointer"
             >
               Analyze Radar Charts

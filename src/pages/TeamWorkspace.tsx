@@ -65,7 +65,15 @@ export const TeamWorkspace: React.FC = () => {
   };
 
   // Active items
-  const activeDoc = workspaceDocuments.find(d => d.id === workspaceActiveDocumentId) || workspaceDocuments[0];
+  const fallbackDoc = {
+    id: 'doc-fallback',
+    title: 'Welcome to your Workspace',
+    content: '## Get Started\nWelcome to your new team workspace! You can create your first document by clicking the **+** button under Notion Pages.',
+    author: 'IntellMeet AI',
+    lastUpdated: new Date().toLocaleTimeString()
+  };
+  
+  const activeDoc = workspaceDocuments.find(d => d.id === workspaceActiveDocumentId) || workspaceDocuments[0] || fallbackDoc;
 
   const handleCreateDocument = (e: React.FormEvent) => {
     e.preventDefault();
