@@ -2,7 +2,7 @@
 import { io, Socket } from 'socket.io-client';
 
 const getSocketUrl = () => {
-  return import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+  return import.meta.env.VITE_SOCKET_URL || window.location.origin;
 };
 
 let socket: Socket | null = null;

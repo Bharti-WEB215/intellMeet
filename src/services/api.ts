@@ -1,7 +1,7 @@
 // services/api.ts
 
 const getApiBaseUrl = () => {
-  const configured = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  const configured = import.meta.env.VITE_API_URL || `${window.location.origin}/api`;
   return configured.replace(/\/$/, '');
 };
 
@@ -16,13 +16,13 @@ const getAuthToken = () => {
 };
 
 // Generic fetch API helper with 401 interceptor
-const request = async (path: string, options: RequestInit = {}) => {
+const request = async (path: string, options: RequestInit = {}, skipJson = false) => {
   const headers = new Headers(options.headers || {});
   const token = getAuthToken();
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  if (!(options.body instanceof FormData)) {
+  if (!skipJson && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -94,6 +94,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ speaker_name, text }),
       }),
+    postTranscriptBlob: (meetingId: string, formData: FormData) =>
+      request(`/meetings/${meetingId}/transcript-blob`, {
+        method: 'POST',
+        body: formData,
+      }, true),
     getTranscript: (meetingId: string) => request(`/meetings/${meetingId}/transcript`),
     end: (meetingId: string) =>
       request(`/meetings/${meetingId}/end`, {

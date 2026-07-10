@@ -396,21 +396,12 @@ export const VideoRoom: React.FC = () => {
           formData.append('audio', audioBlob, 'audio.wav');
           formData.append('speaker_name', formattedSpeaker);
           
-          const response = await fetch(`http://localhost:5000/api/meetings/${activeMeetingId}/transcript-blob`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('intellmeet_token')}`
-            },
-            body: formData
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            // Broadcast transcript segment
+          const response = await api.meetings.postTranscriptBlob(activeMeetingId, formData);
+          if (response?.text) {
             socket.emit('new-transcript-segment', {
               roomId: activeMeetingId,
               speaker: formattedSpeaker,
-              text: data.text
+              text: response.text,
             });
           }
         } catch (err) {
